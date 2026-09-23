@@ -19,7 +19,7 @@
 
 ---
 
-## Setup — Run this at the start of every session
+## Setup — run this at the start of every practice session
 
 ```bash
 alias k=kubectl                              # usually already set up in the exam terminal
@@ -27,8 +27,9 @@ export do="--dry-run=client -o yaml"         # k create deploy x --image=nginx $
 export now="--force --grace-period=0"        # k delete pod x $now
 ```
 
-The answers below use `k`, `$do` and `$now`. For vim settings (`expandtab`, `shiftwidth=2`) and
-tmux tips, see [guide/exam-tips.md](../guide/exam-tips.md).
+The answers below use `k`, `$do` and `$now` to keep them short while you practise. In the exam
+every question runs on a fresh VM (see [my exam setup](../guide/exam-tips.md#my-exam-setup)), so
+exported variables don't carry over: type the flags out, or export them again per question.
 
 ---
 

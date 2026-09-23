@@ -36,7 +36,7 @@ end to end on a real cluster, see [../scenarios/](../scenarios/).
 ## Namespace and context
 Nearly every question opens this way, so make it a reflex:
 ```bash
-kubectl config use-context <context-from-the-question>
+ssh <vm-from-the-question>                              # each question has its own VM
 kubectl create ns dev                                   # only if the question says it doesn't exist
 kubectl config set-context --current --namespace=dev
 kubectl config view --minify | grep namespace           # verify
@@ -46,7 +46,7 @@ kubectl config view --minify | grep namespace           # verify
 
 ## Deployments: imperative first, then YAML
 ```bash
-kubectl create deployment app-a --image=nginx --replicas=2 --port=80 $do > app-a.yaml
+kubectl create deployment app-a --image=nginx --replicas=2 --port=80 --dry-run=client -o yaml > app-a.yaml
 # edit app-a.yaml for anything the flags can't express (env, probes, volumes, resources...)
 kubectl apply -f app-a.yaml
 kubectl rollout status deployment app-a
@@ -71,7 +71,7 @@ env:
 - `kubectl get deployment app-a -n -production`: a stray `-` before the namespace turns it into a
   flag.
 - Forgetting `--dry-run=client` means the object really gets created before you export it, so the
-  YAML carries `uid`, `resourceVersion`, `creationTimestamp` and `status:`. Use `$do` every time.
+  YAML carries `uid`, `resourceVersion`, `creationTimestamp` and `status:`. Type `--dry-run=client -o yaml` every time.
 
 ---
 
@@ -94,7 +94,7 @@ kubectl apply -f web-app-green.yaml
 **Canary: a new Deployment sharing the Service's label.** The Service selects a label that *both*
 versions carry, so traffic is split roughly by replica count rather than cut over:
 ```bash
-kubectl create deployment api-v2-canary --image=vector/api:v2 --replicas=1 $do > canary.yaml
+kubectl create deployment api-v2-canary --image=vector/api:v2 --replicas=1 --dry-run=client -o yaml > canary.yaml
 # edit canary.yaml: add `app: api` to spec.template.metadata.labels (and the selector)
 ```
 ```yaml
@@ -227,11 +227,11 @@ kubectl expose deployment backend --name=backend-np --port=80 --type=NodePort
 ```
 
 **`kubectl create service`** builds a standalone Service. It has **no `--selector` flag**: the
-selector is always `app=<service-name>`. If the pods carry a different label, create it with `$do`
-and edit the selector, or patch it afterwards:
+selector is always `app=<service-name>`. If the pods carry a different label, create it with
+`--dry-run=client -o yaml` and edit the selector, or patch it afterwards:
 ```bash
 kubectl create service nodeport auth-service --tcp=8443:8080 --node-port=30443   # selector app=auth-service
-kubectl create service clusterip db --tcp=5432:5432 $do > db-svc.yaml             # then edit the selector
+kubectl create service clusterip db --tcp=5432:5432 --dry-run=client -o yaml > db-svc.yaml             # then edit the selector
 ```
 `--tcp=<port>:<targetPort>` sets both ports at once.
 
@@ -706,7 +706,7 @@ its output: `echo 'kubectl get pod web -o jsonpath="{.status.phase}"' > /opt/tas
 - **ConfigMap/Secret injection** (`envFrom` vs `valueFrom.*KeyRef` vs volume) comes up in several
   questions. Know all three.
 - **Dry-run discipline.** Forgetting `--dry-run=client` before redirecting to a file creates the
-  object for real. Use `$do`.
+  object for real.
 - **Pods are mostly immutable.** Env vars, volumes and most container fields can't be changed in
   place. Use `replace --force` for bare Pods; Deployments roll out a new template.
 - **Deployment changes go through the pod template.** `set image`/`patch`/`edit` target

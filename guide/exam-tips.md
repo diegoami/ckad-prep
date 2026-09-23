@@ -1,8 +1,7 @@
 # CKAD exam tips
 
-Practical things I learned preparing for (and passing) the CKAD that the curriculum doesn't tell you.
-Most of it is about the exam environment, what the curriculum really expects, and the gotchas that
-cost the most time under pressure.
+Things I learned preparing for (and passing) the CKAD that the curriculum doesn't tell you: what
+the curriculum really expects, and the gotchas that cost the most time under pressure.
 
 For recurring question *shapes* (blue/green, ConfigMap injection, PV/PVC, and so on), see
 [task-patterns.md](task-patterns.md). For drilling individual commands, see
@@ -10,7 +9,7 @@ For recurring question *shapes* (blue/green, ConfigMap injection, PV/PVC, and so
 
 **Contents**
 
-- [The exam environment](#the-exam-environment)
+- [My exam setup](#my-exam-setup)
 - [What the curriculum actually tests](#what-the-curriculum-actually-tests)
 - [Users vs ServiceAccounts](#users-vs-serviceaccounts)
 - [Output: jsonpath, not Go templates](#output-jsonpath-not-go-templates)
@@ -24,121 +23,29 @@ For recurring question *shapes* (blue/green, ConfigMap injection, PV/PVC, and so
 
 ---
 
-## The exam environment
+## My exam setup
 
-### Documentation allowed during the exam
-You get one browser with access to the official docs only:
-- `kubernetes.io/docs`: the main reference, and it covers almost everything
-- `kubernetes.io/blog`
-- `helm.sh/docs`: the Helm CLI reference
-- task-specific docs linked in a question's *Quick Reference* box (for example `docs.podman.io` on
-  an image-building question)
+**One VM per question.** Every question has you `ssh` into its own VM, so there are as many
+machines as there are questions. Anything you configure on one of them is gone at the next one.
+Setting up vim or installing tmux on every VM isn't worth the time, so I didn't.
 
-No GitHub, no Stack Overflow, no tutorial sites. Practise finding things on `kubernetes.io/docs`
-quickly. The search works, but knowing that "Configure Liveness, Readiness and Startup Probes" lives
-under *Tasks → Configure Pods and Containers* saves minutes. The list changes occasionally, so check
-the Linux Foundation's
-[resources allowed during exams](https://docs.linuxfoundation.org/tc-docs/certification/certification-resources-allowed)
-page before you sit the exam.
+**Screen layout.** The question takes up the left part of the screen, and you can hide it when you
+need the space. On the rest I had:
 
-### Always switch context (and namespace) first
-Each question names the cluster context (or host to `ssh` into) it expects. Run that command
-before anything else, every time, even when you think you're already there. Then set the namespace
-so you don't have to type `-n` on every command:
-
-```bash
-k config set-context --current --namespace=<namespace>
-k config view --minify | grep namespace   # verify
+```
++------------------+------------------------------------------------+
+|                  |  browser (kubernetes.io docs)                  |
+|  question        |                                                |
+|  (can be hidden) +-----------------------+------------------------+
+|                  |  terminal 1           |  terminal 2            |
+|                  |  running commands     |  checking files, and   |
+|                  |                       |  docs with kubectl -h  |
++------------------+-----------------------+------------------------+
 ```
 
-This is the most-used command on the exam. Forgetting it is the classic way to do a question
-perfectly in the wrong place.
-
-### Shell setup: do this in the first minute
-```bash
-alias k=kubectl                          # usually preconfigured, check with `type k`
-source <(kubectl completion bash)
-complete -o default -F __start_kubectl k # tab completion for the alias too
-export do="--dry-run=client -o yaml"     # k run nginx --image=nginx $do > pod.yaml
-export now="--force --grace-period=0"    # k delete pod nginx $now
-```
-
-`source` has to come before `complete`, because `__start_kubectl` is defined by the source line.
-Without the `complete` line, tab completion on `k` does nothing.
-
-A namespace-switch function saves retyping `config set-context` on every question:
-```bash
-kns() { kubectl config set-context --current --namespace="$1"; }
-```
-
-Save shell history after every command rather than only on a clean exit. A crashed terminal or a
-hung `kubectl exec` then doesn't lose the commands you already ran:
-```bash
-shopt -s histappend
-export PROMPT_COMMAND="history -a; history -c; history -r; $PROMPT_COMMAND"
-```
-`history -a` appends new commands to `~/.bash_history` after every prompt; `history -c; history -r`
-reloads from the file so several open terminals stay in sync.
-
-### `sudo -i` changes `$HOME`
-Reported by exam takers: switching to a root shell with `sudo -i` changes `$HOME` (and possibly the
-working directory), so a file written before or after the switch can look "missing". It's still on
-disk, under the other user's home. Before assuming a file was never written, check which shell
-you're in; `find / -name <filename> 2>/dev/null` settles it.
-
-### vim settings for YAML
-The exam terminal's `vim` has no `.vimrc` of yours. If you'll edit YAML by hand, set one up first:
-```bash
-cat >> ~/.vimrc <<'EOF'
-set number
-set expandtab
-set tabstop=2
-set shiftwidth=2
-set pastetoggle=<F5>
-EOF
-```
-- **Real tabs break YAML.** Without `expandtab`, pressing Tab (or indenting with `>>` or visual `>`)
-  inserts a literal tab, which `kubectl apply` rejects. To find stray tabs in an existing manifest,
-  use `:set list` (tabs show as `^I`), then fix them with `:%s/\t/  /g`.
-- **Pasting YAML from the browser without paste mode cascades the indentation.** Vim's autoindent
-  reacts to every pasted line, so the nesting grows deeper with each one. Run `:set paste` (or press
-  `<F5>` with the mapping above) before pasting and `:set nopaste` afterwards.
-- **`Ctrl-W` closes the browser tab, not the vim split**, in browser-based exam terminals. Use
-  `:wincmd w` (or `:wincmd h/j/k/l`) to move between splits, or use tmux (below).
-- **Indent a block in one go:** `V`, extend with `j`, then `>`. `3>>` indents the next 3 lines
-  without entering visual mode.
-
-### tmux: split panes without the Ctrl-W conflict
-tmux's prefix is `Ctrl+b`, so it avoids the browser swallowing shortcuts. Use `Ctrl+b %` for a
-vertical split, `Ctrl+b "` for a horizontal one, `Ctrl+b` + arrow keys to move between panes and
-`Ctrl+b z` to zoom a pane in and out. Sessions also survive a dropped connection: create one with
-`tmux new -s ckad`, detach with `Ctrl+b d`, reattach with `tmux attach -t ckad`.
-
-A minimal `~/.tmux.conf` (load it with `tmux source-file ~/.tmux.conf`):
-```
-set -sg escape-time 0      # no lag when pressing Esc in vim inside tmux
-set -g history-limit 10000
-set -g mouse off           # the browser handles copy/paste more predictably
-set -g status-keys vi
-set -g mode-keys vi
-```
-
-### Cluster vs context: there's no `use-cluster`
-A **cluster** entry (`kubectl config get-clusters`) is only connection info: API server URL and CA
-certificate. It has no identity and no namespace, and no command targets it directly. A **context**
-bundles a cluster, a user and a default namespace into the unit kubectl actually works against.
-"Switch to cluster X" always means switching context.
-
-```bash
-k config get-contexts                     # the * marks the active one
-k get nodes --context other-ctx           # one-off, doesn't change your default
-k config use-context other-ctx            # persisted for every later command
-```
-
-### Save answers to the exact file path asked for
-Many questions say "write the output to `/some/path/file`". Grading reads that file. A correct
-answer that only appeared in your terminal scores nothing. Redirect with `>` to the exact path, then
-`cat` it to check.
+One terminal to execute, the other to check files and look things up with `kubectl ... -h` and
+`kubectl explain`. Learning to use those two well is the most useful preparation I can recommend;
+see [kubectl-help.md](kubectl-help.md).
 
 ---
 
@@ -387,7 +294,7 @@ k run x --image=nginx --labels="a=1,b=2"                       # two labels
 k run x --image=nginx --annotations="a=1,b=2"                  # ONE annotation, value "1,b=2"
 k run x --image=nginx --annotations="a=1" --annotations="b=2"  # correct
 ```
-When in doubt, repeat the flag for each key, and check the generated YAML (`$do`) before applying.
+When in doubt, repeat the flag for each key, and check the generated YAML (`--dry-run=client -o yaml`) before applying.
 
 ### `--command` vs bare args after `--`
 Without `--command`, everything after `--` becomes the container's `args:` (replacing the image's
@@ -397,31 +304,15 @@ the `ENTRYPOINT`). See [drill 19.2](../drills/drill.md).
 ### `--dry-run` must be `--dry-run=client`
 A bare `--dry-run` is deprecated. Forget the flag entirely and the object is really created, so the
 YAML you export picks up `uid`, `resourceVersion`, `creationTimestamp` and a `status:` block. Use
-the `$do` variable every time.
+`--dry-run=client -o yaml` every time.
 
 ---
 
 ## Exploring the cluster without leaving the terminal
 
-### `kubectl explain`: use the full path and `--recursive`
-```bash
-k explain pod.spec.containers.livenessProbe
-k explain deploy.spec.strategy.rollingUpdate
-k explain pod.spec --recursive | grep -i -A3 capabilities   # "where does this field live?"
-```
-It's faster than clicking through the docs, and it always matches the cluster's actual API
-version.
-
-### `kubectl <verb> -h`: for command flags and examples
-`explain` describes the **resource schema**; `-h` describes **the command**, with copy-pasteable
-examples at the bottom. `explain` won't tell you what `--to-revision` does, and `-h` won't tell you
-which fields a probe accepts.
-```bash
-k create deployment -h
-k rollout undo -h
-k create ingress -h      # the --rule syntax is hard to remember
-k create cronjob -h
-```
+### `kubectl explain` and `kubectl <command> -h`
+These two are the most useful tools in the exam. They have their own page:
+[kubectl-help.md](kubectl-help.md).
 
 ### `kubectl api-resources`: what exists and what it's called
 ```bash
@@ -515,5 +406,5 @@ k rollout undo deploy/web --to-revision=1
 k rollout restart deploy/web
 
 # delete immediately (with export now="--force --grace-period=0")
-k delete pod web $now
+k delete pod web --force --grace-period=0
 ```

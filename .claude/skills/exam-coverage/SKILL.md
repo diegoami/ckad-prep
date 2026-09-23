@@ -36,8 +36,9 @@ commentary, no references to this skill or to "the user".
      behaviour that differs from the naive expectation). A command that works as documented
      belongs in drill.md alone. Extend an existing section where one fits.
    - **Scope**: only what is exercised *on the exam*. Local environment setup goes in
-     `guide/practice-cluster.md`. Exam-*terminal* mechanics (vim, tmux, browser-eaten shortcuts)
-     belong in exam-tips.md's environment section.
+     `guide/practice-cluster.md`. The "My exam setup" section of exam-tips.md describes the
+     author's real exam setup; don't add generic environment advice (vim, tmux, aliases) there,
+     because each question runs on a fresh VM.
 4. **Verify every command** you write, with `--dry-run=client -o yaml`, `kubectl explain` or
    `-h` against a live cluster if one is reachable (the local kind context is `kind-ckad`). If none
    is reachable, say so. Fetch any `kubernetes.io` doc link you aren't sure exists.

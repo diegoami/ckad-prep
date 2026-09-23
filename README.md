@@ -1,50 +1,86 @@
 # Preparing for the CKAD
 
-The notes, drills and practice questions I used to prepare for the
-[Certified Kubernetes Application Developer](https://training.linuxfoundation.org/certification/certified-kubernetes-application-developer-ckad/)
-exam, which I passed, cleaned up for anyone else going for it.
+I passed the [Certified Kubernetes Application Developer](https://training.linuxfoundation.org/certification/certified-kubernetes-application-developer-ckad/)
+exam, and this repository is what I prepared with: my notes, a deck of kubectl drills, and a
+lot of practice tasks that run on a local cluster. I've tidied it up in the hope it helps you
+too.
 
-The CKAD is a hands-on exam: about two hours in a terminal, solving 15–20 tasks on live clusters with
-only the official docs to help. Reading doesn't prepare you for that; typing does. So nearly
-everything here is meant to be *run* against a local cluster, not just read.
-
-## What's in here
-
-| | What | Use it for |
-|---|---|---|
-| 📘 | [guide/exam-tips.md](guide/exam-tips.md) | The exam environment, shell/vim/tmux setup, what the curriculum really expects, and the gotchas that cost the most time |
-| 🧩 | [guide/task-patterns.md](guide/task-patterns.md) | The question *shapes* that keep recurring (blue/green, ConfigMap injection, PV/PVC, RBAC, probes, ...) with the idiom for each |
-| 🛠️ | [guide/practice-cluster.md](guide/practice-cluster.md) | Setting up a local kind cluster with ingress, metrics-server and NetworkPolicy support |
-| 🔁 | [drills/drill.md](drills/drill.md) | 170+ short questions with collapsible answers and a docs link each, for building muscle memory |
-| ✍️ | [drills/workbook.md](drills/workbook.md) | The same questions without answers, for writing your own |
-| 🧪 | [scenarios/](scenarios/) | 88 exam-style tasks, each with a Setup that creates the starting state, a worked Solution and a Cleanup |
-| ⏱️ | [mock-exams/](mock-exams/) | Two blind, timed practice exams (22 + 13 questions) drawn from the scenarios |
-| 📄 | [examples/](examples/) | Small working manifests (Jobs, Pods, Ingress, 12 Kustomize setups) to apply and poke at |
-| 🔗 | [guide/resources.md](guide/resources.md) | Official links, simulators, question banks and write-ups from people who passed |
+The CKAD is entirely hands-on. You get about two hours for 15–20 tasks, each on its own VM that you
+`ssh` into, with the Kubernetes docs open in a browser. Knowing things isn't enough; you need to
+type them quickly and know where to look when you don't. That's why nearly everything here is
+meant to be run, not just read.
 
 All tasks, scenarios and examples here are written in my own words, with their own names and
 framing. Many are modelled on the *kinds* of task that come up in practice exams, but none reproduce
 real exam questions (the exam is under NDA) or questions from paid simulators and courses. Those
 are linked in [resources](guide/resources.md), not copied.
 
-## A suggested path
+## Learn `kubectl -h` and `kubectl explain`
 
-1. **Read the [curriculum](https://github.com/cncf/curriculum)** and the first two sections of
-   [exam-tips.md](guide/exam-tips.md). Know what's in scope and what the exam environment is like.
-2. **Build the [practice cluster](guide/practice-cluster.md).** You'll use it for everything else.
-3. **Drill every day.** Work through [drill.md](drills/drill.md) a section at a time: try each
-   question, then expand the answer. Mark misses with an `x` and redo them the next day. Aim for
-   speed: the imperative commands (`kubectl run/create/expose/set ... $do`) should become automatic.
-4. **Do the [scenarios](scenarios/) for each curriculum domain.** Run the Setup, solve the Task
-   without looking, then compare with the Solution. The explanations under each Solution are where
-   most of the learning is.
-5. **Read [task-patterns.md](guide/task-patterns.md)** once you've seen most question types. It's
-   the pattern-recognition layer.
-6. **Take the [mock exams](mock-exams/) under time pressure**, and your two included
-   [killer.sh](https://killer.sh) sessions: one about two weeks out, one in the last few days.
-   killer.sh is harder than the real exam, so don't panic about the score.
-7. **Before exam day**, reread the environment section of [exam-tips.md](guide/exam-tips.md) and
-   practise finding pages on kubernetes.io/docs without a search engine.
+If you take one thing from this repository, make it this. In the exam I had two terminals side by
+side: one for running commands, the other for checking files and reading the documentation that's
+built into kubectl. That second terminal answered most of my questions faster than the browser
+could.
+
+`kubectl <command> -h` tells you **how to create something**. Every help page has an Examples
+section with complete commands you can adapt:
+
+```bash
+kubectl create -h                    # everything `create` can make: deployment, job, cronjob, ingress, role, secret, ...
+kubectl create ingress -h            # the exact --rule="host/path=svc:port" syntax, with examples
+kubectl create job -h                # including --from=cronjob/<name>
+kubectl run -h                       # pods: there's no `kubectl create pod`
+kubectl run -h | grep -A1 -E '^\s+--restart'   # jump to one flag
+```
+
+`kubectl explain` tells you **where a field goes**, straight from the cluster's own API schema:
+
+```bash
+kubectl explain pod.spec.containers.securityContext        # any depth, in one go
+kubectl explain deploy.spec.strategy --recursive           # the whole shape at a glance
+kubectl explain pod.spec --recursive | grep -i toleration  # "where did that field live again?"
+```
+
+Practise with these instead of the browser until it's a habit. There's a full guide with more
+examples in [guide/kubectl-help.md](guide/kubectl-help.md).
+
+## What's in here
+
+- **[guide/](guide/)**: the written part.
+  - [kubectl-help.md](guide/kubectl-help.md): the section above, in depth.
+  - [exam-tips.md](guide/exam-tips.md): my exam setup, how to read the curriculum, and the gotchas
+    that cost the most time.
+  - [task-patterns.md](guide/task-patterns.md): the question shapes that keep coming back, with the
+    idiom for each.
+  - [practice-cluster.md](guide/practice-cluster.md): setting up the local kind cluster everything
+    else runs on.
+  - [resources.md](guide/resources.md): simulators, question banks, and write-ups from people who
+    passed.
+- **[drills/drill.md](drills/drill.md)**: 176 short questions, each with a collapsible answer and a
+  docs link, for building speed. [workbook.md](drills/workbook.md) has the same questions with space
+  for your own answers.
+- **[scenarios/](scenarios/)**: 88 exam-style tasks. Each has a Setup that builds the starting
+  state on your cluster, the Task, a worked Solution with the traps explained, and a Cleanup.
+- **[mock-exams/](mock-exams/)**: two blind practice exams (22 and 13 questions) drawn from the
+  scenarios, to take under time pressure.
+- **[examples/](examples/)**: small manifests to apply and poke at: Jobs, Pods, a StatefulSet,
+  NetworkPolicies, Ingress, and 12 Kustomize setups.
+
+## How I'd use it
+
+1. Read the [curriculum](https://github.com/cncf/curriculum) and
+   [exam-tips.md](guide/exam-tips.md), so you know what's in scope.
+2. Build the [practice cluster](guide/practice-cluster.md).
+3. Work through the [drills](drills/drill.md) a section at a time. Try each question before
+   opening the answer, and redo the ones you missed the next day.
+4. Do the [scenarios](scenarios/), a curriculum domain at a time. Solve each Task before reading
+   the Solution. The explanations underneath are where most of the learning is.
+5. Take the [mock exams](mock-exams/) against the clock, and use the two
+   [killer.sh](https://killer.sh) sessions that come with the exam: one a couple of weeks before,
+   one in the last few days. killer.sh is harder than the real thing, so don't let the score
+   worry you.
+
+Throughout, reach for `kubectl -h` and `kubectl explain` before the browser.
 
 ## Where each curriculum domain is practised
 
@@ -57,48 +93,17 @@ are linked in [resources](guide/resources.md), not copied.
 | Services and Networking (20%) | NetworkPolicies, Services, Ingress | 8 | [see index](scenarios/README.md#services-and-networking-20) |
 | General kubectl fluency | output formatting, labels, `run` flags | 1, 2, 18, 19 | [see index](scenarios/README.md#core-kubectl) |
 
-## The ten things I'd tell a friend
-
-1. **Switch context and namespace at the start of every question.** Doing a question right in the
-   wrong place scores zero.
-2. **Generate YAML; don't write it.** `k create deploy x --image=nginx $do > x.yaml` (with
-   `export do="--dry-run=client -o yaml"`), then edit.
-3. **`kubectl explain pod.spec.containers.securityContext`** answers "where does this field go?"
-   faster than the docs.
-4. **Skip and flag.** A 4% question you're stuck on isn't worth the three easy ones after it.
-5. **Verify every answer**: `get`, `describe`, a quick `curl` from a temporary pod. It takes seconds
-   and catches typos.
-6. **Write output files to the exact path asked for.** Grading reads the file.
-7. **Egress NetworkPolicies need a DNS rule** (port 53), or everything "mysteriously" breaks.
-8. **Empty `kubectl get endpoints` means the Service selector doesn't match the pod labels.** That's
-   the number one Services bug.
-9. **Most of a running Pod is immutable.** Export it, edit, then `kubectl replace --force -f`.
-10. **Set up vim for YAML** (`expandtab`, `shiftwidth=2`) before the first question that needs it.
-
-The reasoning behind each of these is in [exam-tips.md](guide/exam-tips.md).
-
-## Repository layout
-
-```
-guide/          exam tips, task patterns, practice-cluster setup, resources
-drills/         drill.md (Q&A deck), workbook.md (generated blank copy), build.py
-scenarios/      88 runnable exam-style tasks, indexed by curriculum domain
-mock-exams/     exam-1/ and exam-2/: blind question files plus answer keys
-examples/       small manifests: pods, jobs, deployments, ingress, kustomize
-.claude/skills/ Claude Code skills used to author and verify the drills and scenarios
-```
-
-After editing `drills/drill.md`, regenerate the workbook with `python3 drills/build.py`, or with
-`python3 drills/build.py --html` to also get printable HTML versions (needs `pip install markdown`).
-
 ## Tested with
 
-Scenarios were verified end to end on kind v0.23 (Kubernetes v1.30), and many also on kind v0.31
-(Kubernetes v1.35), with kubectl v1.36. The exam
-tracks recent Kubernetes releases, so check the current version on the
-[curriculum page](https://github.com/cncf/curriculum) and use a matching kind node image if you
-can. Where kind behaves differently from a real exam cluster (NetworkPolicy enforcement, the default
-StorageClass, metrics-server), the scenario says so.
+The scenarios were verified end to end on kind v0.23 (Kubernetes v1.30), many of them also on
+kind v0.31 (Kubernetes v1.35), with kubectl v1.36. The exam tracks recent Kubernetes releases, so
+check the current version on the [curriculum page](https://github.com/cncf/curriculum) and use a
+matching kind node image if you can. Where kind behaves differently from a real exam cluster
+(NetworkPolicy enforcement, the default StorageClass, metrics-server), the scenario says so.
+
+After editing `drills/drill.md`, regenerate the workbook with `python3 drills/build.py` (add
+`--html` for printable HTML versions; needs `pip install markdown`). The `.claude/skills/` folder
+holds the Claude Code skills I used to write and check the drills and scenarios.
 
 Found a mistake? Issues and pull requests are welcome.
 
