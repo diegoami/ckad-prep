@@ -77,10 +77,10 @@ examples in [guide/kubectl-help.md](guide/kubectl-help.md).
    opening the answer, and redo the ones you missed the next day.
 4. Do the [scenarios](scenarios/), a curriculum domain at a time. Solve each Task before reading
    the Solution. The explanations underneath are where most of the learning is.
-5. Take the [mock exams](mock-exams/) against the clock, and use the two
-   [killer.sh](https://killer.sh) sessions that come with the exam: one a couple of weeks before,
-   one in the last few days. killer.sh is harder than the real thing, so don't let the score
-   worry you.
+5. Take the [mock exams](mock-exams/) against the clock. If you buy the exam through the Linux
+   Foundation you also get two days in a practice environment beforehand. Use it to get used to
+   the desktop, but know that the real exam is slower and puts every question on its own VM (see
+   [my exam setup](guide/exam-tips.md#my-exam-setup)).
 
 Throughout, reach for `kubectl -h` and `kubectl explain` before the browser.
 

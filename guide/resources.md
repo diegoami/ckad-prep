@@ -11,7 +11,7 @@ What I used (or would use again) to prepare, grouped by purpose.
 | [Resources allowed during the exam](https://docs.linuxfoundation.org/tc-docs/certification/certification-resources-allowed) | Which docs you can open in the exam browser. |
 | [Exam user interface](https://docs.linuxfoundation.org/tc-docs/certification/lf-handbook2/exam-user-interface/examui-performance-based-exams) | What the remote desktop, terminal and browser look like. Read it before exam day. |
 | [PSI secure browser requirements](https://helpdesk.psionline.com/hc/en-gb/articles/4409608794260-PSI-secure-browser-and-Chrome-Extension-System-Requirements) | Check your machine well before the exam. |
-| [Training portal](https://trainingportal.linuxfoundation.org/) | Scheduling, check-in, and the two included simulator sessions. |
+| [Training portal](https://trainingportal.linuxfoundation.org/) | Scheduling, check-in, and access to the practice environment. |
 
 ## Documentation you can use during the exam
 
@@ -29,7 +29,7 @@ Practise navigating these; they're the only references you'll have.
 
 | Resource | Notes |
 |---|---|
-| [killer.sh CKAD simulator](https://killer.sh/ckad) | Two sessions come free with the exam. Harder than the real thing, which is the point. Do one about two weeks out and one a few days before. |
+| [killer.sh CKAD simulator](https://killer.sh/ckad) | Exam-style simulator; access is included when you buy the exam through the Linux Foundation. |
 | [KodeKloud CKAD mock exam series](https://learn.kodekloud.com/user/courses/ultimate-certified-kubernetes-application-developer-ckad-mock-exam-series) | Several full mock exams with a live environment (paid). |
 | [MyExamCloud CKAD practice tests](https://www.myexamcloud.com/onlineexam/ckad-free-practice-tests.course) | Free practice questions. |
 | [dgkanatsios/CKAD-exercises](https://github.com/dgkanatsios/CKAD-exercises) | The classic free question bank, organised by curriculum area. |
