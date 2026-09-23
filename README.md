@@ -70,7 +70,9 @@ examples in [guide/kubectl-help.md](guide/kubectl-help.md).
 
 1. Read the [curriculum](https://github.com/cncf/curriculum) and
    [exam-tips.md](guide/exam-tips.md), so you know what's in scope.
-2. Build the [practice cluster](guide/practice-cluster.md).
+2. Build the [practice cluster](guide/practice-cluster.md), and get to know your tools: the
+   terminal (I practised in an Xfce desktop on Ubuntu) and vim, especially indenting and
+   unindenting. See [my exam setup](guide/exam-tips.md#my-exam-setup).
 3. Work through the [drills](drills/drill.md) a section at a time. Try each question before
    opening the answer, and redo the ones you missed the next day.
 4. Do the [scenarios](scenarios/), a curriculum domain at a time. Solve each Task before reading

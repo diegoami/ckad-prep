@@ -47,6 +47,34 @@ One terminal to execute, the other to check files and look things up with `kubec
 `kubectl explain`. Learning to use those two well is the most useful preparation I can recommend;
 see [kubectl-help.md](kubectl-help.md).
 
+**Two attempts.** The exam comes with two attempts, and the first one is also your chance to learn
+the environment for real.
+
+**Know your tools until they're second nature.** Under time pressure there's no room to wonder how
+the terminal copies and pastes, how to open a second one, or what it can't do. To get used to it
+before the exam, I installed Xfce on Ubuntu and practised in its terminal until using it was second
+nature.
+
+**vim.** You can't know vim too well, unless you go with nano instead. Learn what most vim
+tutorials teach you, but above all learn how to **indent and unindent**, because in YAML the
+indentation *is* the structure:
+
+| Keys | What it does |
+|---|---|
+| `>>` / `<<` | indent / unindent the current line |
+| `3>>` / `3<<` | indent / unindent 3 lines, starting at the cursor |
+| `V`, move with `j`/`k`, then `>` or `<` | indent / unindent a visual block of lines |
+| `.` | repeat the last indent (press it again to move the block one more step) |
+| `gv` | reselect the last visual block |
+| `u` / `Ctrl-r` | undo / redo |
+
+Plain vim indents by one tab of 8 columns, which breaks YAML. If `>>` jumps that far,
+`:set sw=2 et` fixes it for the file you have open.
+
+The basics most tutorials cover are worth having in your fingers too: `i`/`Esc`, `:wq` and `:q!`,
+`dd`/`yy`/`p`, `/text` then `n` to search, `x`, and `:set paste` before pasting YAML from the
+browser, so the indentation doesn't cascade.
+
 ---
 
 ## What the curriculum actually tests
