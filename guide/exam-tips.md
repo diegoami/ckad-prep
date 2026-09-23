@@ -27,7 +27,8 @@ For recurring question *shapes* (blue/green, ConfigMap injection, PV/PVC, and so
 
 **One VM per question.** Every question has you `ssh` into its own VM, so there are as many
 machines as there are questions. Anything you configure on one of them is gone at the next one.
-Setting up vim or installing tmux on every VM isn't worth the time, so I didn't.
+Setting up vim or installing tmux on every VM isn't worth the time; any configuration you do is a
+waste.
 
 **Screen layout.** The question takes up the left part of the screen, and you can hide it when you
 need the space. On the rest I had:
@@ -47,8 +48,14 @@ One terminal to execute, the other to check files and look things up with `kubec
 `kubectl explain`. Learning to use those two well is the most useful preparation I can recommend;
 see [kubectl-help.md](kubectl-help.md).
 
-**Two attempts.** The exam comes with two attempts, and the first one is also your chance to learn
-the environment for real.
+**Two attempts, and a practice environment.** The exam comes with two attempts, and the first one
+is also your chance to learn the environment for real. If you buy the exam through the Linux
+Foundation, you also get access to a practice environment for two days beforehand. It gets you used
+to Xfce, but the real exam environment is worse:
+- **The browser is slower in the real exam** than in the practice environment.
+- **The practice environment doesn't prepare you for the one-VM-per-question setup.** In the exam,
+  every single question is answered on a different cluster, on a different VM you `ssh` into. So
+  any configuration you do is a waste.
 
 **Know your tools until they're second nature.** Under time pressure there's no room to wonder how
 the terminal copies and pastes, how to open a second one, or what it can't do. To get used to it
