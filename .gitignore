@@ -1,0 +1,4 @@
+.venv/
+drills/*.html
+__pycache__/
+*.swp

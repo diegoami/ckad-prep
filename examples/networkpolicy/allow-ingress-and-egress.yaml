@@ -1,0 +1,23 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: web-allow-policy
+  namespace: netpol-demo
+spec:
+  podSelector:
+    matchLabels:
+      app: web
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          webaccess: "true"
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          webaccess: "true"
+
+  policyTypes:
+  - Ingress
+  - Egress

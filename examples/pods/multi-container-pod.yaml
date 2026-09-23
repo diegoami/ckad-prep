@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    run: busybox-p
+  name: busybox-p
+spec:
+  containers:
+  - image: busybox
+    name: busybox
+    command: ['sh', '-c', 'sleep 3600']
+  - image: busybox
+    name: busybox2
+    command: ['sh', '-c', 'sleep 3600']
+  dnsPolicy: ClusterFirst
+  restartPolicy: Never

@@ -1,0 +1,15 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: my-job-c
+spec:
+  activeDeadlineSeconds: 30
+  template:
+    metadata: {}
+    spec:
+      containers:
+      - image: busybox
+        name: my-job
+        resources: {}
+        command: ["sh", "-c", "echo Hello Kubernetes! && sleep 1"]
+      restartPolicy: Never

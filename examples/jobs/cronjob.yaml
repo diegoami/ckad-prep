@@ -1,0 +1,19 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: heartdate
+spec:
+  jobTemplate:
+    metadata:
+      name: heartdate
+    spec:
+      template:
+        metadata: {}
+        spec:
+          containers:
+          - image: busybox
+            name: heartdate
+            resources: {}
+            command: ["sh", "-c", "date"]
+          restartPolicy: OnFailure
+  schedule: "* * * * *"

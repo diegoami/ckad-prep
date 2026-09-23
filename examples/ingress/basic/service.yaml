@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: demoservice
+  labels:
+    app: demo
+spec:
+  selector:
+    app: demo
+  ports:
+  - port: 99          # the Service's port, referenced by the Ingress backend
+    protocol: TCP
+    targetPort: 80    # the container's port
