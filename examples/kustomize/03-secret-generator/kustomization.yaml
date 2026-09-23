@@ -1,4 +1,6 @@
 secretGenerator:
-- name: example-secret-1
+- name: orders-db
+  literals:
+  - DB_USER=orders
   files:
-  - password.txt
+  - DB_PASSWORD=db-password.txt    # key name set explicitly instead of using the file name

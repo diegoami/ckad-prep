@@ -1,35 +1,16 @@
+# Each Pod gets a stable index (0..3) in $JOB_COMPLETION_INDEX and handles one shard.
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: 'indexed-job'
+  name: thumbnail-shards
 spec:
-  completions: 5
-  parallelism: 3
+  completions: 4
+  parallelism: 2
   completionMode: Indexed
   template:
     spec:
       restartPolicy: Never
-      initContainers:
-      - name: 'input'
-        image: 'docker.io/library/bash'
-        command:
-        - "bash"
-        - "-c"
-        - |
-          items=(foo: bar baz qux xyz)
-          echo ${items[$JOB_COMPLETION_INDEX]} > /input/data.txt
-        volumeMounts:
-        - mountPath: /input
-          name: input
       containers:
-      - name: 'worker'
-        image: 'docker.io/library/busybox'
-        command:
-        - "rev"
-        - "/input/data.txt"
-        volumeMounts:
-        - mountPath: /input
-          name: input
-      volumes:
-      - name: input
-        emptyDir: {}
+      - name: worker
+        image: busybox:1.36
+        command: ["sh", "-c", "echo resizing images in shard $JOB_COMPLETION_INDEX of 4"]

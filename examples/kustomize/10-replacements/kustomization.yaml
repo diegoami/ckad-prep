@@ -1,18 +1,17 @@
-namePrefix: dev-
-nameSuffix: "-001"
-
 resources:
-- deployment.yaml
 - service.yaml
-
+- deployment.yaml
+namePrefix: dev-
+# Copy the Service's final name (after namePrefix) into the app's DB_HOST env var,
+# so the two can never drift apart.
 replacements:
 - source:
     kind: Service
-    name: my-nginx
+    name: inventory-db
     fieldPath: metadata.name
   targets:
   - select:
       kind: Deployment
-      name: my-nginx
+      name: inventory-api
     fieldPaths:
-    - spec.template.spec.containers.0.command.2
+    - spec.template.spec.containers.[name=app].env.[name=DB_HOST].value

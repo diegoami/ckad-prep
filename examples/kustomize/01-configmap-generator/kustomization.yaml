@@ -1,11 +1,12 @@
-# Three ways to generate a ConfigMap: from a file, from an env file, from literals.
+# One ConfigMap per source type. Build it and compare the three `data:` blocks.
 configMapGenerator:
-- name: from-file              # key "application.properties", value = the file's content
+- name: shop-settings              # one key, named after the file, holding its whole content
   files:
-  - application.properties
-- name: from-env-file          # one key per line of .env (FOO=Bar)
+  - shop.properties
+- name: shop-env                   # one key per KEY=value line
   envs:
-  - .env
-- name: from-literals
+  - shop.env
+- name: shop-theme                 # keys given inline
   literals:
-  - FOO=Bar
+  - THEME=dark
+  - BANNER_TEXT=Autumn sale

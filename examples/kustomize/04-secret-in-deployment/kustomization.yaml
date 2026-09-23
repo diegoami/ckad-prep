@@ -1,6 +1,7 @@
 resources:
 - deployment.yaml
 secretGenerator:
-- name: example-secret-1
-  files:
-  - password.txt
+- name: orders-db
+  literals:
+  - DB_USER=orders
+  - DB_PASSWORD=not-a-real-password

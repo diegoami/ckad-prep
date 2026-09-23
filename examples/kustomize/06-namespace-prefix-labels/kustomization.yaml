@@ -1,11 +1,11 @@
-namespace: my-namespace
-namePrefix: dev-
-nameSuffix: "-001"
-labels:
-  - pairs:
-      app: bingo
-    includeSelectors: true 
-commonAnnotations:
-  oncallPager: 800-555-1212
 resources:
 - deployment.yaml
+namespace: bookshop-staging        # set on every resource (the namespace must exist to apply)
+namePrefix: staging-
+nameSuffix: -v2                    # catalog -> staging-catalog-v2
+labels:
+- pairs:
+    app.kubernetes.io/part-of: bookshop
+  includeSelectors: true           # also added to spec.selector and the Pod template
+commonAnnotations:
+  contact: "#bookshop-oncall"

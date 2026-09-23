@@ -1,18 +1,21 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: my-nginx
+  name: inventory-api
 spec:
+  replicas: 1
   selector:
     matchLabels:
-      run: my-nginx
-  replicas: 2
+      component: inventory-api
   template:
     metadata:
       labels:
-        run: my-nginx
+        component: inventory-api
     spec:
       containers:
-      - name: my-nginx
-        image: nginx
-        command: ["start", "--host", "MY_SERVICE_NAME_PLACEHOLDER"]
+      - name: app
+        image: busybox:1.36
+        command: ["sh", "-c", "echo db at $DB_HOST; sleep 3600"]
+        env:
+        - name: DB_HOST
+          value: set-by-kustomize

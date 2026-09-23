@@ -1,7 +1,10 @@
-namePrefix: dev-
-labels:
-  - pairs:
-      app: my-nginx
-    includeSelectors: true 
 resources:
 - deployment.yaml
+labels:
+- pairs:
+    app.kubernetes.io/name: reviews
+  includeSelectors: true           # also added to spec.selector: fine for new objects,
+                                   # but selectors are immutable on existing Deployments
+- pairs:
+    cost-center: books-42
+  includeSelectors: false          # metadata only (the default)

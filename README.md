@@ -22,6 +22,11 @@ everything here is meant to be *run* against a local cluster, not just read.
 | 📄 | [examples/](examples/) | Small working manifests (Jobs, Pods, Ingress, 12 Kustomize setups) to apply and poke at |
 | 🔗 | [guide/resources.md](guide/resources.md) | Official links, simulators, question banks and write-ups from people who passed |
 
+All tasks, scenarios and examples here are written in my own words, with their own names and
+framing. Many are modelled on the *kinds* of task that come up in practice exams, but none reproduce
+real exam questions (the exam is under NDA) or questions from paid simulators and courses. Those
+are linked in [resources](guide/resources.md), not copied.
+
 ## A suggested path
 
 1. **Read the [curriculum](https://github.com/cncf/curriculum)** and the first two sections of

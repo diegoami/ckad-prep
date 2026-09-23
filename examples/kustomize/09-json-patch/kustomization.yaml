@@ -1,10 +1,7 @@
 resources:
 - deployment.yaml
-
 patches:
-- target:
-    group: apps
-    version: v1
+- path: tune.json.yaml
+  target:                          # JSON patches need an explicit target
     kind: Deployment
-    name: my-nginx
-  path: patch.yaml
+    name: recommendations

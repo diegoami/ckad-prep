@@ -1,6 +1,6 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: my-nginx
+  name: search-api
 spec:
-  replicas: 3
+  replicas: 4

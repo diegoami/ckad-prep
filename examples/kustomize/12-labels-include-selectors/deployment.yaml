@@ -1,19 +1,17 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: my-nginx
+  name: reviews
 spec:
+  replicas: 1
   selector:
     matchLabels:
-      run: my-nginx
-  replicas: 2
+      component: reviews
   template:
     metadata:
       labels:
-        run: my-nginx
+        component: reviews
     spec:
       containers:
-      - name: my-nginx
-        image: nginx
-        ports:
-        - containerPort: 80
+      - name: app
+        image: nginx:1.27-alpine

@@ -1,25 +1,24 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: my-app
-  labels:
-    app: my-app
+  name: bookshop-web
 spec:
+  replicas: 1
   selector:
     matchLabels:
-      app: my-app
+      component: bookshop-web
   template:
     metadata:
       labels:
-        app: my-app
+        component: bookshop-web
     spec:
       containers:
       - name: app
-        image: my-app
+        image: nginx:1.27-alpine
         volumeMounts:
-        - name: config
-          mountPath: /config
+        - name: settings
+          mountPath: /etc/bookshop
       volumes:
-      - name: config
+      - name: settings
         configMap:
-          name: example-configmap-1
+          name: bookshop-config

@@ -1,6 +1,8 @@
 resources:
 - deployment.yaml
+# The generated name gets a hash suffix (bookshop-config-<hash>); Kustomize rewrites the
+# reference in deployment.yaml to match, so a config change rolls the Pods.
 configMapGenerator:
-- name: example-configmap-1
+- name: bookshop-config
   files:
-  - application.properties
+  - shop.properties

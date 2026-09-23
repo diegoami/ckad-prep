@@ -1,6 +1,8 @@
 resources:
 - deployment.yaml
+# Rewrites every container image named "nginx", without touching deployment.yaml.
+# Imperative equivalent: kustomize edit set image nginx=registry.example.com/mirror/nginx:1.27.2
 images:
 - name: nginx
-  newName: my.image.registry/nginx
-  newTag: "1.4.0"
+  newName: registry.example.com/mirror/nginx
+  newTag: "1.27.2"

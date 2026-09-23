@@ -1,12 +1,9 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: my-nginx
-  labels:
-    run: my-nginx
+  name: inventory-db
 spec:
-  ports:
-  - port: 80
-    protocol: TCP
   selector:
-    run: my-nginx
+    component: inventory-db
+  ports:
+  - port: 5432

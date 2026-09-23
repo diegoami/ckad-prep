@@ -1,10 +1,12 @@
 configMapGenerator:
-- name: example-configmap-3
+- name: feature-flags
   literals:
-  - FOO=Bar
+  - CHECKOUT_V2=false
+  - GIFT_WRAP=true
+# Applies to every generator in this file.
 generatorOptions:
-  disableNameSuffixHash: true
+  disableNameSuffixHash: true      # plain name "feature-flags", no hash suffix
   labels:
-    type: generated
+    team: storefront
   annotations:
-    note: generated
+    owner: platform-team

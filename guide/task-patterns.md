@@ -1,7 +1,8 @@
 # CKAD task patterns
 
 The question *shapes* that kept coming back across the practice exams I took, grouped by task type
-rather than by question. On exam day the goal is to recognise the pattern within the first sentence
+rather than by question. These are generalised patterns with my own example names and manifests,
+not reproductions of any exam or simulator question. On exam day the goal is to recognise the pattern within the first sentence
 and reach for the right idiom.
 
 For the reasoning behind many of the gotchas, see [exam-tips.md](exam-tips.md). To practise these

@@ -1,25 +1,21 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: my-app
-  labels:
-    app: my-app
+  name: orders-worker
 spec:
+  replicas: 1
   selector:
     matchLabels:
-      app: my-app
+      component: orders-worker
   template:
     metadata:
       labels:
-        app: my-app
+        component: orders-worker
     spec:
       containers:
       - name: app
-        image: my-app
-        volumeMounts:
-        - name: password
-          mountPath: /secrets
-      volumes:
-      - name: password
-        secret:
-          secretName: example-secret-1
+        image: busybox:1.36
+        command: ["sh", "-c", "echo connecting as $DB_USER; sleep 3600"]
+        envFrom:
+        - secretRef:
+            name: orders-db
