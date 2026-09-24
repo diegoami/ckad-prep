@@ -143,6 +143,21 @@ Not a curriculum domain, but exam mechanics every question relies on.
 | [008](008-move-pod-between-namespaces.md) | Move a Pod to a different namespace | Medium |
 | [022](022-label-annotate-matching-pods.md) | Label and annotate Pods based on an existing label match | Easy |
 
+## Sources
+
+The scenarios are written in my own words, with their own names and values. Many are modelled on
+task *types* reported by people who took the exam, and a few on practice-question collections:
+
+- Exam write-ups: [codebob75](https://medium.com/@codebob75/passing-ckad-cheatsheet-notes-and-tips-1aa285e6a473),
+  [codegenitor](https://codegenitor.medium.com/i-passed-ckad-heres-what-actually-came-up-and-what-helped-me-after-failing-once-fb5914b15f22),
+  [Lajko on ITNEXT](https://itnext.io/how-the-ckad-certification-has-changed-from-2021-to-2024-06aec019a35a),
+  [ExamCert](https://www.examcert.app/blog/ckad-practice-questions-tips-2026/). Scenarios 048–088
+  in particular cover the task types these describe.
+- Practice exams: the killer.sh CKAD simulator and MyExamCloud's free CKAD practice tests, which
+  inspired the task types of several scenarios in 001–047.
+
+If you want the original questions, go to those sources; none are reproduced here.
+
 ## Format
 
 Every file follows the same shape:

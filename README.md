@@ -109,7 +109,19 @@ holds the Claude Code skills I used to write and check the drills and scenarios.
 
 Found a mistake? Issues and pull requests are welcome.
 
+## Credits
+
+This repository builds on other people's work, credited where it's used:
+- the drill deck follows many exercises from [dgkanatsios/CKAD-exercises](https://github.com/dgkanatsios/CKAD-exercises)
+  (MIT) and some from [jamesbuckett/ckad-questions](https://github.com/jamesbuckett/ckad-questions)
+  (Apache 2.0); see the [drill deck](drills/drill.md)
+- the task patterns come partly from MyExamCloud's practice tests; see
+  [task-patterns.md](guide/task-patterns.md)
+- many scenarios are modelled on task types described in exam write-ups; see
+  [scenarios/README.md](scenarios/README.md#sources)
+
 ## License
 
-[MIT](LICENSE). Links in [guide/resources.md](guide/resources.md) point to third-party material under
-its own terms.
+[MIT](LICENSE) for my own material. The licenses of the projects the drill deck builds on are in
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Links in [guide/resources.md](guide/resources.md)
+point to third-party material under its own terms.

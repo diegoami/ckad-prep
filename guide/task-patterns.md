@@ -5,11 +5,11 @@ rather than by question. On exam day the goal is to recognise the pattern within
 and reach for the right idiom.
 
 > **Where this comes from.** This page is partly derivative. The task types, and several of the
-> gotchas, come from working through practice exams, mainly KodeKloud's
-> [Ultimate CKAD Mock Exam Series](https://learn.kodekloud.com/user/courses/ultimate-certified-kubernetes-application-developer-ckad-mock-exam-series)
-> and MyExamCloud's [free CKAD practice tests](https://www.myexamcloud.com/onlineexam/ckad-free-practice-tests.course).
-> The grouping, explanations and examples are my own; the examples use a fictional bike-rental
-> company instead of the names in those questions. For the original questions, go to the sources.
+> gotchas, come from the practice exams I worked through, mainly MyExamCloud's
+> [free CKAD practice tests](https://www.myexamcloud.com/onlineexam/ckad-free-practice-tests.course).
+> Some of those questions closely resemble "CKAD dump" questions that circulate online. I'm not
+> reproducing any of them: the grouping, explanations and examples here are my own, and the
+> examples use a fictional bike-rental company instead of the names in those questions.
 
 For the reasoning behind many of the gotchas, see [exam-tips.md](exam-tips.md). To practise these
 end to end on a real cluster, see [../scenarios/](../scenarios/).

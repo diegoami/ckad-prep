@@ -16,6 +16,13 @@
 >
 > Each heading links to the kubernetes.io (or helm/podman) page you're allowed to open in the
 > exam. Learn where those pages are as well as what's on them.
+>
+> **Credits.** Many questions in sections 1–4, 6, 12 and 16 follow the exercises in
+> [dgkanatsios/CKAD-exercises](https://github.com/dgkanatsios/CKAD-exercises) (MIT License,
+> © 2018 Dimitris-Ilias Gkanatsios), often with the same values. Questions 3.9–3.11, 8.10 and
+> 14.1–14.3 are based on [jamesbuckett/ckad-questions](https://github.com/jamesbuckett/ckad-questions)
+> (Apache License 2.0). The answers and explanations are my own. Both repositories are worth
+> working through in full.
 
 ---
 
