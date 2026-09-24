@@ -1,115 +1,123 @@
-# 063 — Add `runAsUser: 10000` to a Deployment whose securityContext already nests `capabilities`
+# 063 — Set a container's UID and GID without losing its existing securityContext, in a two-container Pod
 
 **Domain:** Application Environment, Configuration and Security · **Difficulty:** Easy
 
-Same core lesson as `051`, but here the existing `securityContext` nests a `capabilities` object
-rather than holding two flat booleans. The question is whether a strategic merge patch that adds a
-sibling field leaves the nested object intact.
+Same core lesson as `051`, but here the existing `securityContext` nests a `capabilities` object,
+and the Pod has a second container that must stay as it is. The question is whether a strategic
+merge patch that adds sibling fields leaves both the nested object and the other container intact.
 
 ## Task
 
-> Deployment `worker` in namespace `denali` already sets `allowPrivilegeEscalation: false` and
-> `capabilities.drop: ["ALL"]` on its one container, `worker`. Add `runAsUser: 10000` without
-> removing or changing either existing field.
+> The `zedoary` team runs Deployment `invoice-renderer` with two containers, `renderer` and
+> `log-shipper`. The `renderer` container already has a `securityContext` with
+> `readOnlyRootFilesystem: true` and `capabilities.drop: ["ALL"]`. Make the `renderer` process run
+> as user ID `3105` and group ID `3105`. Keep both existing settings, and don't change
+> `log-shipper`.
 
 ## Documentation
 
 What to look up: **Configure a Security Context**, plus strategic merge patch behavior.
 - <https://kubernetes.io/docs/tasks/configure-pod-container/security-context/>
 - <https://kubernetes.io/docs/tasks/manage-kubernetes-objects/update-api-object-kubectl-patch/> —
-  how a strategic merge patch handles nested objects, not just flat fields.
+  how a strategic merge patch merges lists of containers by `name` and nested objects key by key.
 
 ## Setup
 
 ```bash
-kubectl create ns denali
+kubectl create ns zedoary
 
 cat <<'EOF' | kubectl apply -f -
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: worker
-  namespace: denali
+  name: invoice-renderer
+  namespace: zedoary
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: worker
+      app: invoice-renderer
   template:
     metadata:
       labels:
-        app: worker
+        app: invoice-renderer
     spec:
       containers:
-      - name: worker
-        image: busybox:1.31.0
+      - name: log-shipper
+        image: busybox:1.36
+        command: ["sh", "-c", "sleep 3600"]
+      - name: renderer
+        image: busybox:1.36
         command: ["sh", "-c", "sleep 3600"]
         securityContext:
-          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
           capabilities:
             drop: ["ALL"]
 EOF
 
-kubectl rollout status deployment/worker -n denali --timeout=60s
+kubectl rollout status deployment/invoice-renderer -n zedoary --timeout=60s
 ```
 
-`busybox` rather than `nginx` here deliberately — `capabilities.drop: ["ALL"]` strips
-`NET_BIND_SERVICE` too, and nginx's master process needs it to bind port 80 as root before dropping
-privileges; it CrashLoopBackOffs under this exact securityContext. `busybox sleep` needs no
-capabilities at all, so the container actually stays up and this stays a pure merge-patch exercise
-rather than accidentally also debugging a capability-related crash.
+`busybox` rather than `nginx` deliberately: `capabilities.drop: ["ALL"]` also strips
+`NET_BIND_SERVICE`, and a read-only root filesystem stops nginx writing its cache and PID files,
+so nginx would crash under this securityContext. `sleep` needs neither, which keeps this a pure
+merge-patch exercise.
 
 Confirm the "given" state:
 ```bash
-kubectl get deploy worker -n denali -o jsonpath='{.spec.template.spec.containers[0].securityContext}'
-# {"allowPrivilegeEscalation":false,"capabilities":{"drop":["ALL"]}}
+kubectl get deploy invoice-renderer -n zedoary \
+  -o jsonpath='{range .spec.template.spec.containers[*]}{.name}: {.securityContext}{"\n"}{end}'
+# log-shipper:
+# renderer: {"capabilities":{"drop":["ALL"]},"readOnlyRootFilesystem":true}
 ```
 
 ## Solution
 
-Same rule as `051`: the default strategic merge patch merges nested objects key-by-key, so naming
-the container and only the new field is enough:
+The default strategic merge patch matches entries in `containers` by `name` and merges nested
+objects key by key. Naming the container and only the two new fields is enough. Note that
+`renderer` is the *second* container, so `containers/0` in a JSON patch would hit the wrong one:
 ```bash
-kubectl patch deployment worker -n denali -p \
-  '{"spec":{"template":{"spec":{"containers":[{"name":"worker","securityContext":{"runAsUser":10000}}]}}}}'
+kubectl patch deployment invoice-renderer -n zedoary -p \
+  '{"spec":{"template":{"spec":{"containers":[{"name":"renderer","securityContext":{"runAsUser":3105,"runAsGroup":3105}}]}}}}'
 
-kubectl rollout status deployment/worker -n denali --timeout=30s
+kubectl rollout status deployment/invoice-renderer -n zedoary --timeout=60s
 ```
 
-**Faster by hand:** `kubectl edit deployment worker -n denali`, find the existing `securityContext:`
-block under the container, add `runAsUser: 10000` as a sibling of `capabilities:`, save — same
-result, and (same point as `051`) no merge-type to get wrong since you're never sending a partial patch.
+**Faster by hand:** `kubectl edit deployment invoice-renderer -n zedoary`, find the
+`securityContext:` of the `renderer` container, add `runAsUser: 3105` and `runAsGroup: 3105` next to
+`capabilities:`, save. As in `051`, there's no patch type to get wrong because you save the whole
+object. Just make sure you are in the right container's block.
 
-Confirm all three fields survive — `capabilities.drop` included, since it's a nested object one
-level deeper than the two fields `051` tested:
+Confirm the existing fields survived, the new ones are there, and `log-shipper` is unchanged:
 ```bash
-kubectl get deploy worker -n denali -o jsonpath='{.spec.template.spec.containers[0].securityContext}'
-# {"allowPrivilegeEscalation":false,"capabilities":{"drop":["ALL"]},"runAsUser":10000}
+kubectl get deploy invoice-renderer -n zedoary \
+  -o jsonpath='{range .spec.template.spec.containers[*]}{.name}: {.securityContext}{"\n"}{end}'
+# log-shipper:
+# renderer: {"capabilities":{"drop":["ALL"]},"readOnlyRootFilesystem":true,"runAsGroup":3105,"runAsUser":3105}
 ```
 
-Confirm it's not just spec-deep but actually enforced at runtime — the container's own process runs
-as the new UID:
+Confirm it is enforced at runtime, not just in the spec:
 ```bash
-POD=$(kubectl get pods -n denali -l app=worker --sort-by=.metadata.creationTimestamp \
+POD=$(kubectl get pods -n zedoary -l app=invoice-renderer --sort-by=.metadata.creationTimestamp \
   -o jsonpath='{.items[-1:].metadata.name}')
-kubectl exec -n denali "$POD" -- id
-# uid=10000 gid=0(root) groups=0(root)
+kubectl exec -n zedoary "$POD" -c renderer -- id
+# uid=3105 gid=3105 groups=3105
+kubectl exec -n zedoary "$POD" -c log-shipper -- id
+# uid=0(root) gid=0(root) groups=0(root),10(wheel)
 ```
 Pick the **newest** Pod. `sleep` ignores SIGTERM, so the old Pod stays `Terminating` for its full
 30s grace period after `rollout status` returns, and `{.items[0]}` can still pick it. Its `id` shows
-`uid=0(root)`, which looks like the patch failed when it hasn't.
+root, which looks like the patch failed when it hasn't. Also pass `-c`: without it, `kubectl exec`
+uses the first container, `log-shipper`.
 
-The patch's own field ordering — `runAsUser` sitting alongside `capabilities` in the JSON, not
-inside it — is what proves the merge is nesting-aware: a patch that clobbered the whole
-`securityContext` object instead of merging into it would have silently dropped `capabilities`
-entirely, and there'd be no error to catch it. Always re-fetch and check the full field after a
-patch touching a nested `securityContext`/`resources`-shaped object — the patch command succeeding
-doesn't guarantee sibling fields survived, only checking the result does.
+A patch that *replaced* the whole `securityContext` instead of merging into it would have dropped
+`capabilities` and `readOnlyRootFilesystem` without any error. The patch command succeeding doesn't
+prove the sibling fields survived; re-reading the object does.
 
 ## Cleanup
 
 ```bash
-kubectl delete ns denali
+kubectl delete ns zedoary
 ```
 
-*Verified end-to-end on a local kind cluster (Kubernetes v1.30) on 2026-09-23.*
+*Verified end-to-end on a local kind cluster (Kubernetes v1.30) on 2026-09-24.*

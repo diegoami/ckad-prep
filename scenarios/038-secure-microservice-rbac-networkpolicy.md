@@ -8,7 +8,7 @@ Combines three concepts (`ServiceAccount`, `Role`/`RoleBinding`, `NetworkPolicy`
 ## Task
 
 > Deployment `payments` (namespace `securesvc`) runs under ServiceAccount `payments-sa` and reads a
-> DB password from Secret `db-creds` as an env var. Harden it two ways:
+> DB password from Secret `payments-db-login` as an env var. Harden it two ways:
 > 1. `payments-sa` should be able to `get`/`list` Secrets in its own namespace (it needs to
 >    introspect its own config at runtime) — and nothing else; no Pods, no other verbs.
 > 2. Restrict the Pod's egress to only the `database` Service on port 5432, plus DNS.
@@ -24,7 +24,7 @@ What to look up: **Using RBAC Authorization** and **Network Policies**, together
 ```bash
 kubectl create ns securesvc
 kubectl -n securesvc create serviceaccount payments-sa
-kubectl -n securesvc create secret generic db-creds --from-literal=password=s3cret
+kubectl -n securesvc create secret generic payments-db-login --from-literal=password=not-a-real-pw-17
 kubectl -n securesvc create deployment database --image=nginx:1.25-alpine --port=5432
 kubectl -n securesvc expose deployment database --port=5432
 
@@ -47,7 +47,7 @@ spec:
         env:
         - name: DB_PASSWORD
           valueFrom:
-            secretKeyRef: {name: db-creds, key: password}
+            secretKeyRef: {name: payments-db-login, key: password}
 EOF
 kubectl -n securesvc rollout status deployment payments --timeout=30s
 ```
@@ -130,3 +130,6 @@ without error but has no effect; the RBAC half is still independently verifiable
 ```bash
 kubectl delete ns securesvc
 ```
+
+*Verified end-to-end on a local kind cluster (Kubernetes v1.30) on 2026-09-24. That kindnet does not
+enforce NetworkPolicy, so the egress policy applied cleanly but its blocking effect was not observed.*

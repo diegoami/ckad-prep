@@ -392,13 +392,13 @@
 
 ```
 
-### 6.5 Create a Secret `db-creds` with `password=s3cr3t`
+### 6.5 Create a Secret `app-secret` with `password=changeme-42`
 
 ```bash
 
 ```
 
-### 6.6 Decode the value of key `password` from secret `db-creds`
+### 6.6 Decode the value of key `password` from secret `app-secret`
 
 ```bash
 
@@ -410,7 +410,7 @@
 
 ```
 
-### 6.8 Mount secret `db-creds` as a volume at `/etc/secrets` (read-only)
+### 6.8 Mount secret `app-secret` as a volume at `/etc/secrets` (read-only)
 
 ```bash
 

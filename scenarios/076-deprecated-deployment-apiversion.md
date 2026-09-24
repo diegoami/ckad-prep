@@ -2,7 +2,7 @@
 
 **Domain:** Application Observability and Maintenance · **Difficulty:** Medium
 
-Unlike `031` (an Ingress) and `067` (an HPA), a Deployment on `extensions/v1beta1` has a structural
+Unlike `031` (an Ingress) and `067` (a CronJob), a Deployment on `extensions/v1beta1` has a structural
 gap: that old API let `spec.selector` be omitted and derived it from the Pod template's labels,
 which `apps/v1` no longer does. So bumping only the `apiVersion` line still doesn't apply, for a
 different reason than in those two scenarios.

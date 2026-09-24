@@ -1,28 +1,33 @@
-# 068 — Docker: build, name a container, push under a username, save under a different tag
+# 068 — Docker: build once, smoke-test on a published port, push two tags, bundle two names in one archive
 
 **Domain:** Application Design and Build · **Difficulty:** Medium
 
-`059` only builds, tags and saves, and `011` builds, pushes and runs. This one chains all four
-steps, and each step asks for a different tag of the same image. What's being tested is keeping
-track of which reference each command needs.
+`059` only builds, tags and saves, and `011` builds, pushes and runs. This one chains the whole
+workflow, and every step needs a *different reference* to the same image: a local tag, two
+registry-qualified tags, and a set of local names inside an archive. What's being tested is keeping
+track of which reference each command needs, and checking the result rather than trusting exit
+codes.
 
 ## Task
 
-> The `kilimanjaro` team keeps the Dockerfile for its `trail-api` service in
-> `~/ckad/068/trail-api/`. Using Docker:
+> The `cobalt` team keeps the Dockerfile for its `ledger-api` service in
+> `~/ckad/068/ledger-api/`. Using Docker:
 >
-> 1. Build an image `trail-api:1.0.1` from it.
-> 2. Start a detached container named `trail-api` from that image.
-> 3. Push the image to the team registry at `localhost:5000`, under the team's path `kilimanjaro`,
->    tagged `latest`.
-> 4. Save the image, tagged `v2`, to the archive `~/ckad/068/trail-api-v2.tar`.
+> 1. Build an image `ledger-api:4.2.0` from it.
+> 2. Smoke-test it: run a detached container `ledger-smoke` from that image, reachable on host port
+>    `18080` (the service listens on `8080` inside the container), and save the response to
+>    `http://localhost:18080/` in `~/ckad/068/smoke.txt`.
+> 3. Publish the image to the team registry at `localhost:5055`, repository `cobalt/ledger-api`,
+>    under both the tag `4.2.0` and the tag `stable`.
+> 4. Write a single archive `~/ckad/068/ledger-api-bundle.tar` that, when loaded, gives back the
+>    image under both local names `ledger-api:4.2.0` and `ledger-api:stable`.
 
 ## Documentation
 
 What to look up: **Images**, on the Kubernetes side. Build, tag, push and save are covered by
 Docker's own documentation, not Kubernetes'.
-- <https://kubernetes.io/docs/concepts/containers/images/> — image reference syntax, relevant once
-  any of these tags gets referenced from a Pod spec.
+- <https://kubernetes.io/docs/concepts/containers/images/> — image reference syntax (registry host,
+  repository path, tag), relevant once any of these references ends up in a Pod spec.
 
 ## Setup
 
@@ -30,67 +35,83 @@ On the exam the registry would already exist. Locally, a throwaway `registry:2` 
 for it:
 
 ```bash
-docker run -d -p 5000:5000 --name team-registry registry:2
+docker run -d -p 5055:5000 --name cobalt-registry registry:2
 
-mkdir -p ~/ckad/068/trail-api
-cat > ~/ckad/068/trail-api/Dockerfile <<'EOF'
-FROM busybox:1.31.0
-CMD ["sh", "-c", "echo trail-api running; sleep 3600"]
+mkdir -p ~/ckad/068/ledger-api
+cat > ~/ckad/068/ledger-api/index.html <<'EOF'
+ledger-api 4.2.0 ok
+EOF
+cat > ~/ckad/068/ledger-api/Dockerfile <<'EOF'
+FROM busybox:1.36
+COPY index.html /www/index.html
+EXPOSE 8080
+CMD ["httpd", "-f", "-p", "8080", "-h", "/www"]
 EOF
 ```
 
 ## Solution
 
-Build and tag in one step, then run a **named** container from it. "Start a container named
-`trail-api`" is a separate requirement from building the image, and easy to forget:
+Build, then run the smoke-test container. The order in `-p` is `HOST:CONTAINER`, so it's
+`18080:8080`, not the other way round. `EXPOSE` in the Dockerfile is documentation only and
+publishes nothing by itself:
 ```bash
-docker build -t trail-api:1.0.1 ~/ckad/068/trail-api
-docker run -d --name trail-api trail-api:1.0.1
+docker build -t ledger-api:4.2.0 ~/ckad/068/ledger-api
+docker run -d --name ledger-smoke -p 18080:8080 ledger-api:4.2.0
+
+sleep 1
+curl -s http://localhost:18080/ > ~/ckad/068/smoke.txt
+cat ~/ckad/068/smoke.txt
+# ledger-api 4.2.0 ok
 ```
 
-Push under the team's registry path. This needs a *second* tag, because
-`localhost:5000/kilimanjaro/trail-api:latest` doesn't match `trail-api:1.0.1` in registry, path or
-tag:
+Push. `docker push` takes no destination argument: where an image goes is encoded in its *name*
+(`localhost:5055/cobalt/ledger-api`), so each registry tag has to exist locally first. Two tags means
+two `docker tag` + `docker push` pairs:
 ```bash
-docker tag trail-api:1.0.1 localhost:5000/kilimanjaro/trail-api:latest
-docker push localhost:5000/kilimanjaro/trail-api:latest
+docker tag ledger-api:4.2.0 localhost:5055/cobalt/ledger-api:4.2.0
+docker tag ledger-api:4.2.0 localhost:5055/cobalt/ledger-api:stable
+docker push localhost:5055/cobalt/ledger-api:4.2.0
+docker push localhost:5055/cobalt/ledger-api:stable
+```
+The second push prints `Layer already exists` for every layer: both tags point at the same image,
+so the registry stores it once. `docker push --all-tags localhost:5055/cobalt/ledger-api` pushes
+every local tag of that repository in one command, if you prefer.
+
+Save. The archive records the *names you pass* to `docker save` (its `RepoTags`), not every tag the
+image happens to have. The task wants the plain local names, so `ledger-api:stable` has to exist
+before you save, and both names go on the same command line:
+```bash
+docker tag ledger-api:4.2.0 ledger-api:stable
+docker save -o ~/ckad/068/ledger-api-bundle.tar ledger-api:4.2.0 ledger-api:stable
 ```
 
-Save under **yet another** tag (`v2`) that was never pushed and never ran. This is the step most
-likely to be skipped or fumbled, since it's easy to assume "the image" means whichever tag was used
-last:
+Check each result on its own. A successful `docker push` says nothing about the archive, and the
+other way round:
 ```bash
-docker tag trail-api:1.0.1 trail-api:v2
-docker save --output ~/ckad/068/trail-api-v2.tar trail-api:v2
+docker ps --filter name=ledger-smoke --format '{{.Names}} {{.Image}} {{.Ports}}'
+# ledger-smoke ledger-api:4.2.0 0.0.0.0:18080->8080/tcp, [::]:18080->8080/tcp
+
+curl -s http://localhost:5055/v2/cobalt/ledger-api/tags/list
+# {"name":"cobalt/ledger-api","tags":["4.2.0","stable"]}
+
+tar -xOf ~/ckad/068/ledger-api-bundle.tar manifest.json
+# [{"Config":...,"RepoTags":["ledger-api:4.2.0","ledger-api:stable"],"Layers":[...]}]
 ```
 
-Check each of the three references on its own. A passing `docker push` says nothing about whether
-`docker save` used the right reference, and the other way round:
-```bash
-docker ps --filter name=trail-api --format '{{.Names}} {{.Image}} {{.Status}}'
-# trail-api trail-api:1.0.1 Up ...
-
-curl -s http://localhost:5000/v2/kilimanjaro/trail-api/tags/list
-# {"name":"kilimanjaro/trail-api","tags":["latest"]}
-
-tar -xOf ~/ckad/068/trail-api-v2.tar manifest.json
-# [{"Config":...,"RepoTags":["trail-api:v2"],"Layers":[...]}]
-```
-
-**The trap this scenario is built around:** the task names *three different tags* for the *same
-underlying image* (`1.0.1` built, `latest` pushed, `v2` saved) and never says to retag before push
-or save. That's implied by "push it... tagged latest" and "save it, tagged v2" each being
-requirements of their own. Building once and reusing `trail-api:1.0.1` for the push or the save
-without retagging produces a push or save that runs without error but under the wrong reference.
-It looks exactly like success unless you check the tag on the pushed or saved artifact against what
-was asked for.
+**The trap this scenario is built around:** every step also "works" with the wrong reference.
+Saving `localhost:5055/cobalt/ledger-api:stable` instead of `ledger-api:stable` succeeds, but the
+image loads back under the registry name. Saving only `ledger-api:4.2.0` succeeds, but the archive is
+missing the second name. Pushing only one tag succeeds, and the other tag is simply absent from the
+registry. None of these produce an error, so compare the registry's tag list and the archive's
+`RepoTags` against what the task asked for.
 
 ## Cleanup
 
 ```bash
-docker rm -f trail-api team-registry
-docker rmi trail-api:1.0.1 trail-api:v2 localhost:5000/kilimanjaro/trail-api:latest
+docker rm -f ledger-smoke cobalt-registry
+docker rmi ledger-api:4.2.0 ledger-api:stable \
+  localhost:5055/cobalt/ledger-api:4.2.0 localhost:5055/cobalt/ledger-api:stable
 rm -rf ~/ckad/068
 ```
 
-*Verified end-to-end with Docker 29 and a local registry:2 container on 2026-09-23.*
+*Verified end-to-end with Docker 29 and a local registry:2 container on 2026-09-24.*

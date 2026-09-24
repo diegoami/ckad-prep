@@ -1,16 +1,23 @@
-# 080 — Pod Security Standards: a namespace label rejecting non-compliant Pods
+# 080 — Pod Security Admission: preview, enforce and fix a Deployment under `restricted`
 
 **Domain:** Application Environment, Configuration and Security · **Difficulty:** Medium
 
 The other securityContext scenarios (`024`, `051`, `063`, `071`, `079`) work at the Pod level.
-Pod Security Admission is the namespace-level layer that replaced PodSecurityPolicy, and it rejects
-Pods before any of those settings get a chance to matter.
+Pod Security Admission is the namespace-level layer that replaced PodSecurityPolicy. Turning it on
+in a namespace that already has workloads is where it gets interesting: the running Pods are left
+alone, and the damage only shows up the next time a controller tries to create a Pod.
 
 ## Task
 
-> Make namespace `secure` enforce the `restricted` Pod Security Standard, so it rejects any Pod
-> that doesn't meet it. Confirm a plain Pod gets rejected, then create one that actually satisfies the
+> The `iridium` team's namespace `iridium` runs the Deployment `report-poller`. The platform team is
+> moving namespaces to the `restricted` Pod Security Standard, pinned to the `v1.30` version of the
 > standard.
+>
+> 1. Without changing anything yet, find out which of the Pods currently running in `iridium` would
+>    violate it.
+> 2. Enforce `restricted` (`v1.30`) on `iridium`, and also make it *warn* at the same level and
+>    version.
+> 3. Make `report-poller` compliant, so that it can roll out new Pods under the new policy.
 
 ## Documentation
 
@@ -18,95 +25,121 @@ What to look up: **Pod Security Standards**, and **Pod Security Admission**.
 - <https://kubernetes.io/docs/concepts/security/pod-security-standards/> — the three levels
   (Privileged/Baseline/Restricted) and exactly which fields `restricted` requires.
 - <https://kubernetes.io/docs/concepts/security/pod-security-admission/> — the
-  `pod-security.kubernetes.io/enforce` namespace label mechanism itself.
+  `pod-security.kubernetes.io/<mode>` and `<mode>-version` namespace labels, and which modes apply
+  to workload resources.
+- <https://kubernetes.io/docs/tasks/configure-pod-container/enforce-standards-namespace-labels/> —
+  the `--dry-run=server` preview.
 
 ## Setup
 
 ```bash
-kubectl create ns secure
+kubectl create ns iridium
+kubectl create deployment report-poller -n iridium --image=busybox:1.36 --replicas=2 \
+  -- sh -c 'while true; do echo polling reports; sleep 30; done'
+kubectl rollout status deployment/report-poller -n iridium --timeout=60s
 ```
 
 ## Solution
 
-Turn on enforcement with a namespace label:
+Preview first. A server-side dry run of the label runs the admission check against every existing
+Pod and prints the violations as warnings, without saving the label:
 ```bash
-kubectl label ns secure pod-security.kubernetes.io/enforce=restricted
+kubectl label --dry-run=server --overwrite ns iridium \
+  pod-security.kubernetes.io/enforce=restricted pod-security.kubernetes.io/enforce-version=v1.30
 ```
-No CRD, no extra controller, no admission webhook to install — Pod Security Admission has been a
-built-in, always-on part of the API server since Kubernetes 1.25; the namespace label alone is
-enough to activate it.
+```
+Warning: existing pods in namespace "iridium" violate the new PodSecurity enforce level "restricted:v1.30"
+Warning: report-poller-<hash>-<id> (and 1 other pod): allowPrivilegeEscalation != false, unrestricted capabilities, runAsNonRoot != true, seccompProfile
+namespace/iridium labeled (server dry run)
+```
+Identical Pods are grouped (`and 1 other pod`), so both `report-poller` replicas are affected.
+`--dry-run=client` would print nothing useful here: the check only happens in the API server.
 
-Confirm the rejection — a completely ordinary Pod, no securityContext at all:
+Now apply it for real. Each mode has its own label and its own `-version` label, so that's four labels:
 ```bash
-cat <<'EOF' | kubectl apply -f -
-apiVersion: v1
-kind: Pod
-metadata:
-  name: web
-  namespace: secure
+kubectl label --overwrite ns iridium \
+  pod-security.kubernetes.io/enforce=restricted pod-security.kubernetes.io/enforce-version=v1.30 \
+  pod-security.kubernetes.io/warn=restricted pod-security.kubernetes.io/warn-version=v1.30
+```
+The real `label` prints the same two warnings, but violating Pods never block the label itself. No
+CRD, controller or webhook to install: Pod Security Admission is built into the API server (stable
+since 1.25), and the namespace labels are all it takes.
+
+The running Pods are **not** evicted. Enforcement only happens when a Pod is created, which is why
+this can look like it changed nothing:
+```bash
+kubectl get pods -n iridium
+# both report-poller Pods still Running
+```
+
+Trigger a new rollout and watch it break. `enforce` checks only Pods, so the Deployment update
+itself is accepted. The `warn` mode does check workload templates, and that's the only feedback you
+get on the command line:
+```bash
+kubectl rollout restart deployment/report-poller -n iridium
+# Warning: would violate PodSecurity "restricted:v1.30": allowPrivilegeEscalation != false (...), ...
+# deployment.apps/report-poller restarted
+
+sleep 5
+kubectl get rs -n iridium
+# the new ReplicaSet has DESIRED 1, CURRENT 0: it can't create any Pod
+
+kubectl get events -n iridium --field-selector reason=FailedCreate -o custom-columns=MSG:.message | tail -1
+# Error creating: pods "report-poller-<hash>-<id>" is forbidden: violates PodSecurity "restricted:v1.30": ...
+```
+Without the `warn` label, `rollout restart` prints nothing unusual and the rejection only shows up as
+a `FailedCreate` event on the ReplicaSet. With a Deployment, always check the ReplicaSet (or
+`kubectl get events`) when Pods don't appear.
+
+Fix the Pod template. The rejection message lists every missing field at once, so there's no need to
+remember the `restricted` rules. `busybox` runs as root by default, so `runAsNonRoot: true` also
+needs a numeric non-root `runAsUser` (see `079`):
+```bash
+kubectl patch deployment report-poller -n iridium -p '
 spec:
-  containers:
-  - name: web
-    image: nginx:1.25-alpine
-EOF
+  template:
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: busybox
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+'
+kubectl rollout status deployment/report-poller -n iridium --timeout=90s
+# deployment "report-poller" successfully rolled out
 ```
-```
-Error from server (Forbidden): error when creating "STDIN": pods "web" is forbidden:
-violates PodSecurity "restricted:latest": allowPrivilegeEscalation != false (container "web" must
-set securityContext.allowPrivilegeEscalation=false), unrestricted capabilities (container "web"
-must set securityContext.capabilities.drop=["ALL"]), runAsNonRoot != true (pod or container "web"
-must set securityContext.runAsNonRoot=true), seccompProfile (pod or container "web" must set
-securityContext.seccompProfile.type to "RuntimeDefault" or "Localhost")
-```
-This is the single most useful thing about Pod Security Admission for the exam: the rejection
-message itself enumerates every field still missing, all at once — no need to consult the
-`restricted` spec from memory or guess field names one at a time.
-
-Build a Pod satisfying all four, reusing `079`'s unprivileged nginx image (a `runAsNonRoot`-safe
-image is a prerequisite here too — `restricted` requires it just like `079`'s task did on its own):
+The patch is a strategic merge, so the container is matched by its `name` (`busybox`, from the image
+name, as `kubectl create deployment` chose it) and only the new fields are added. **Faster by
+hand:** `kubectl edit deployment report-poller -n iridium` and add both `securityContext` blocks.
+The rollout replaces the stuck ReplicaSet with a new one whose Pods pass admission:
 ```bash
-cat <<'EOF' | kubectl apply -f -
-apiVersion: v1
-kind: Pod
-metadata:
-  name: web
-  namespace: secure
-spec:
-  securityContext:
-    runAsNonRoot: true
-    seccompProfile:
-      type: RuntimeDefault
-  containers:
-  - name: web
-    image: nginxinc/nginx-unprivileged:1.25-alpine
-    securityContext:
-      allowPrivilegeEscalation: false
-      capabilities:
-        drop: ["ALL"]
-EOF
-```
-```bash
-kubectl get pod web -n secure
-# READY 1/1, STATUS Running
+kubectl get rs -n iridium
+# NAME                       DESIRED   CURRENT   READY
+# report-poller-<new-hash>   2         2         2      <- the compliant template
+# report-poller-<hash>       0         0         0      <- the stuck one, scaled away
+# report-poller-<hash>       0         0         0      <- the original
 ```
 
-Note where each field lives: `runAsNonRoot` and `seccompProfile` can be set at the **Pod** level
-(`spec.securityContext`), where they act as defaults for every container in the Pod, while
-`allowPrivilegeEscalation` and `capabilities.drop` exist only per-**container**
+Note where each field lives: `runAsNonRoot`, `runAsUser` and `seccompProfile` can be set at the
+**Pod** level (`spec.securityContext`), where they act as defaults for every container, while
+`allowPrivilegeEscalation` and `capabilities` exist only per **container**
 (`spec.containers[].securityContext`). The rejection message hints at this ("pod or container"
-versus "container"), but it's easy to miss: put `capabilities` under the Pod's `securityContext`
-and the API server rejects it as an unknown field.
+versus "container"), but it's easy to miss: put `capabilities` under the Pod's `securityContext` and
+the API server rejects it as an unknown field.
 
-**Difference from `enforce=restricted` worth knowing:** `pod-security.kubernetes.io/warn=restricted`
-(a separate label) only prints a warning on `kubectl apply` without blocking creation — useful for
-auditing an existing namespace before actually turning on `enforce` and breaking anything already
-running there.
+Pinning `-version` to `v1.30` keeps the rules fixed when the cluster is upgraded. Without it the
+label means `latest`, and the rules can tighten under you after an upgrade.
 
 ## Cleanup
 
 ```bash
-kubectl delete ns secure
+kubectl delete ns iridium
 ```
 
-*Verified end-to-end on a local kind cluster (Kubernetes v1.30) on 2026-09-23. Pod Security
-Admission behaves the same on v1.30 as on newer versions, including the rejection message.*
+*Verified end-to-end on a local kind cluster (Kubernetes v1.30) on 2026-09-24.*

@@ -1,130 +1,126 @@
-# 079 — `runAsNonRoot: true` on an image that defaults to root, and why the fix has two layers
+# 079 — `runAsNonRoot: true` rejects an image that is already non-root
 
 **Domain:** Application Environment, Configuration and Security · **Difficulty:** Medium
 
-`051`, `063` and `071` set a specific `runAsUser` UID. `runAsNonRoot` is a *boolean assertion*
-checked against whatever UID the image would run as: it fails before the container starts, not as a
-runtime crash, and passing it turns out to be only the first of two problems.
+`051`, `063` and `071` set a specific `runAsUser` UID. `runAsNonRoot` is different: it's a
+*boolean check* the kubelet makes against the UID the container would run as, just before starting
+it. The check can only pass if the kubelet can *prove* that UID isn't 0, and an image whose `USER`
+is a name rather than a number can't be proven either way, even when it's perfectly non-root.
 
 ## Task
 
-> The platform team in namespace `sicily` wants its front-end Pod `web` to refuse to start if its
-> container image would run as root. Create `web` with that guarantee using the stock
-> `nginx:1.25-alpine` image and show that it's refused, then end up with a `web` Pod that keeps the
-> guarantee and is actually running and serving nginx.
+> In namespace `tungsten`, the bare Pod `session-cache` (image `memcached:1.6-alpine`, no
+> controller) is running. The security team wants the kubelet itself to block the container from
+> ever being started with UID 0, whatever the image or a later edit says. Add that safeguard, and end
+> up with a `session-cache` Pod that has it and is running and serving on port `11211`.
 
 ## Documentation
 
-What to look up: **Configure a Security Context** — the `runAsNonRoot` field specifically.
-- <https://kubernetes.io/docs/tasks/configure-pod-container/security-context/> — note it's
-  documented as a *policy check against the image's configured user*, not a guarantee the app works
-  as that user, which is exactly the two-layer gotcha this scenario walks through.
+What to look up: **Configure a Security Context**, the `runAsNonRoot` and `runAsUser` fields.
+- <https://kubernetes.io/docs/tasks/configure-pod-container/security-context/> — `runAsNonRoot` is
+  documented as a check made against the container's user, not as something that changes the user.
 
 ## Setup
 
 ```bash
-kubectl create ns sicily
+kubectl create ns tungsten
+kubectl run session-cache -n tungsten --image=memcached:1.6-alpine --port=11211
+kubectl wait --for=condition=Ready pod/session-cache -n tungsten --timeout=60s
 ```
 
 ## Solution
 
+Before changing anything, check who the container runs as now:
 ```bash
+kubectl exec session-cache -n tungsten -- id
+# uid=11211(memcache) gid=11211(memcache) groups=11211(memcache)
+```
+It's already non-root, so adding `runAsNonRoot: true` looks like a formality. It's a
+`securityContext` change on a bare Pod, though, and those fields can't be changed on a running Pod
+(see `071`), so the Pod has to be deleted and created again:
+```bash
+kubectl delete pod session-cache -n tungsten
 cat <<'EOF' | kubectl apply -f -
 apiVersion: v1
 kind: Pod
 metadata:
-  name: web
-  namespace: sicily
+  name: session-cache
+  namespace: tungsten
 spec:
   securityContext:
     runAsNonRoot: true
   containers:
-  - name: web
-    image: nginx:1.25-alpine
+  - name: session-cache
+    image: memcached:1.6-alpine
+    ports:
+    - containerPort: 11211
 EOF
 ```
-
-Confirm the rejection — and notice it's a distinct failure mode from a crash:
 ```bash
-kubectl get pod web -n sicily
+sleep 5
+kubectl get pod session-cache -n tungsten
 # STATUS: CreateContainerConfigError
 
-kubectl describe pod web -n sicily | tail -3
-# Warning  Failed  ...  container has runAsNonRoot and image will run as root
+kubectl describe pod session-cache -n tungsten | grep -m1 'non-numeric'
+# Error: container has runAsNonRoot and image has non-numeric user (memcache), cannot verify user is non-root ...
 ```
-`CreateContainerConfigError` means the kubelet refused to even create the container process — it
-checks the image's configured user at container-creation time, so this never shows up as
-`CrashLoopBackOff` or a climbing restart count. `nginx:1.25-alpine`'s image defaults to `USER root`
-(needed so its entrypoint can bind port 80 and set up its cache directories before dropping
-privileges internally), which is exactly what `runAsNonRoot: true` refuses to run at all.
+`CreateContainerConfigError` means the kubelet refused to create the container at all, so this never
+shows up as `CrashLoopBackOff` or a climbing restart count. The image's `USER` is the *name*
+`memcache`. The kubelet doesn't look inside the image's `/etc/passwd`, so it can't tell whether that
+name maps to UID 0, and `runAsNonRoot` fails closed.
 
-**The obvious next move — just add an arbitrary non-root `runAsUser` — passes the gate but doesn't
-actually work:**
+The fix is to give the kubelet a number to check: set `runAsUser` to the UID that `id` showed. Using
+the image's own UID (rather than any non-zero number) keeps file ownership inside the image
+consistent with what the process runs as:
 ```bash
-kubectl delete pod web -n sicily
+kubectl delete pod session-cache -n tungsten
 cat <<'EOF' | kubectl apply -f -
 apiVersion: v1
 kind: Pod
 metadata:
-  name: web
-  namespace: sicily
+  name: session-cache
+  namespace: tungsten
 spec:
   securityContext:
     runAsNonRoot: true
-    runAsUser: 101
+    runAsUser: 11211
   containers:
-  - name: web
-    image: nginx:1.25-alpine
+  - name: session-cache
+    image: memcached:1.6-alpine
+    ports:
+    - containerPort: 11211
 EOF
+
+kubectl wait --for=condition=Ready pod/session-cache -n tungsten --timeout=60s
+kubectl exec session-cache -n tungsten -- id
+# uid=11211(memcache) gid=11211(memcache) groups=11211(memcache)
 ```
+Check that it actually serves, not just that it started. The Pod IP is enough for a one-off client:
 ```bash
-kubectl get pod web -n sicily
-# STATUS: Error / CrashLoopBackOff — different failure than before, container DID start this time
-
-kubectl logs web -n sicily
-# nginx: [emerg] mkdir() "/var/cache/nginx/client_temp" failed (13: Permission denied)
-```
-The `runAsNonRoot` check only cares that the UID is non-zero — it has no idea whether that
-UID can actually write to the directories the image's entrypoint needs. UID `101` satisfies the
-*policy*, then immediately fails at *runtime* because the stock `nginx` image's filesystem
-permissions were never set up for an arbitrary non-root user, only for its internal root→nginx-user
-privilege drop.
-
-The real fix is an image actually built to run unprivileged from the start, not a UID bolted onto
-one that wasn't:
-```bash
-kubectl delete pod web -n sicily
-cat <<'EOF' | kubectl apply -f -
-apiVersion: v1
-kind: Pod
-metadata:
-  name: web
-  namespace: sicily
-spec:
-  securityContext:
-    runAsNonRoot: true
-  containers:
-  - name: web
-    image: nginxinc/nginx-unprivileged:1.25-alpine
-EOF
-```
-```bash
-kubectl get pod web -n sicily
-# READY 1/1, STATUS Running
-
-kubectl logs web -n sicily | tail -3
-# start worker process ...  — genuinely serving, not just passing the runAsNonRoot check
+IP=$(kubectl get pod session-cache -n tungsten -o jsonpath='{.status.podIP}')
+kubectl run mc-check -n tungsten --rm -i --restart=Never --image=busybox:1.36 -- \
+  sh -c "printf 'stats\r\nquit\r\n' | nc -w 2 $IP 11211 | grep -m1 'STAT pid'"
+# STAT pid 1
 ```
 
-**Lesson:** `runAsNonRoot: true` is a policy check, not a guarantee the app works — satisfying it
-(image running as *some* non-zero UID) and the app *functioning* as that UID are two separate
-problems with two separate fixes. An arbitrary `runAsUser` addresses only the first; the image
-itself has to be built to tolerate running unprivileged for the second.
+For comparison, all the ways `runAsNonRoot: true` can end, each verified on the same cluster:
+
+| Container's user | Result |
+| --- | --- |
+| numeric and non-zero (`runAsUser: 11211` here, or an image whose `USER` is a number) | starts |
+| root (image with no `USER`, e.g. `busybox`) | `CreateContainerConfigError`: `container has runAsNonRoot and image will run as root` |
+| explicit `runAsUser: 0` | `CreateContainerConfigError`: `container's runAsUser breaks non-root policy` |
+| a name (image `USER memcache`, as here) | `CreateContainerConfigError`: `image has non-numeric user (...), cannot verify user is non-root` |
+
+**Lesson:** `runAsNonRoot: true` doesn't change who the container runs as; it only refuses to start
+it unless the UID is provably non-zero. When the image names its user instead of numbering it, the
+guarantee needs a `runAsUser` alongside it, and you find the right number by asking the running
+container (`id`) before you delete it.
 
 ## Cleanup
 
 ```bash
-kubectl delete ns sicily
+kubectl delete ns tungsten
 ```
 
-*Verified end-to-end on a local kind cluster (Kubernetes v1.30) on 2026-09-23.*
+*Verified end-to-end on a local kind cluster (Kubernetes v1.30) on 2026-09-24.*

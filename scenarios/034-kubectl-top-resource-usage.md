@@ -1,11 +1,14 @@
-# 034 — Find the pod using the most CPU with `kubectl top`
+# 034 — Flag the Pod holding the most memory with `kubectl top`
 
 **Domain:** Application Observability and Maintenance · **Difficulty:** Easy
 
 ## Task
 
-> Namespace `topns` has a Deployment `stress` under CPU load. Identify which of its Pods is using
-> the most CPU right now, using `kubectl` directly — no external monitoring stack.
+> The Pavo team's image pipeline runs in namespace `pavo` as three Deployments: `thumbnailer`,
+> `exif-scanner` and `watermarker`. The node is short on memory and someone has to look at the
+> worst offender first. Using `kubectl` only (no monitoring stack), find the Pod in `pavo` with the
+> highest **memory** usage right now and add the label `memory-review=pending` to that Pod and to
+> no other.
 
 ## Documentation
 
@@ -18,38 +21,66 @@ What to look up: **Resource metrics pipeline**.
 
 ```bash
 # metrics-server isn't preinstalled on kind — see guide/practice-cluster.md
-kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
-kubectl patch deployment metrics-server -n kube-system --type=json \
-  -p '[{"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--kubelet-insecure-tls"}]'
-kubectl rollout status deployment metrics-server -n kube-system --timeout=60s
-sleep 15
+if ! kubectl get deployment metrics-server -n kube-system >/dev/null 2>&1; then
+  kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+  kubectl patch deployment metrics-server -n kube-system --type=json \
+    -p '[{"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--kubelet-insecure-tls"}]'
+fi
+kubectl rollout status deployment metrics-server -n kube-system --timeout=90s
 
-kubectl create ns topns
-kubectl -n topns create deployment stress --image=polinux/stress --replicas=1 -- stress --cpu 1 --timeout 120s
-kubectl -n topns wait --for=condition=ready pod -l app=stress --timeout=60s
-sleep 20
+kubectl create ns pavo
+kubectl -n pavo create deployment thumbnailer --image=polinux/stress --replicas=2 -- stress --vm 1 --vm-bytes 48M --vm-hang 0
+kubectl -n pavo create deployment exif-scanner --image=polinux/stress -- stress --vm 1 --vm-bytes 160M --vm-hang 0
+kubectl -n pavo create deployment watermarker --image=polinux/stress -- stress --cpu 1
+kubectl -n pavo wait --for=condition=Available deployment --all --timeout=90s
+sleep 45
 ```
 
 ## Solution
 
 Without metrics-server, `kubectl top` fails with `Metrics API not available`. The
-`--kubelet-insecure-tls` patch is needed because kind's kubelets serve self-signed certificates;
-the first scrape completes roughly 15s after the rollout. The Setup's final `sleep 20` lets the
-stress Pod burn CPU for a few scrape intervals before you measure.
+`--kubelet-insecure-tls` patch is needed because kind's kubelets serve self-signed certificates.
+metrics-server only has numbers for a Pod after it has scraped it a couple of times, so the Setup's
+final `sleep 45` gives the new Pods time to show up (right after they start, `kubectl top` can
+report `metrics not available yet`).
 
 ```bash
-kubectl -n topns top pod --sort-by=cpu
-# NAME                      CPU(cores)   MEMORY(bytes)
-# stress-6b8859f499-k9jwv   991m         0Mi
+kubectl -n pavo top pod --sort-by=memory
+# NAME                            CPU(cores)   MEMORY(bytes)
+# exif-scanner-779bc567d5-rmr6d   0m           160Mi
+# thumbnailer-65bf9dbf8-brcjh     0m           48Mi
+# thumbnailer-65bf9dbf8-7jv58     0m           48Mi
+# watermarker-cf4bf558f-vx6wh     1066m        0Mi
 ```
 
-`--sort-by=cpu` (or `=memory`) sorts descending by that column — the top row is always the answer
-to "which pod is using the most." Works cluster-wide too: `kubectl top pod -A --sort-by=cpu`.
-`kubectl top node` is the equivalent one level up, for "which *node* is under pressure" instead of
-which pod.
+`--sort-by=memory` (or `=cpu`) sorts descending by that column, so the top row is the answer. Label
+it without retyping the generated name:
+```bash
+POD=$(kubectl -n pavo top pod --sort-by=memory --no-headers | head -1 | awk '{print $1}')
+kubectl -n pavo label pod "$POD" memory-review=pending
+
+kubectl -n pavo get pods -l memory-review=pending
+# exactly one Pod: the exif-scanner one
+```
+
+**The trap:** "most resources" questions are often about CPU, and `--sort-by=cpu` is the version
+people remember. Here it puts `watermarker` on top, burning a full core with next to no memory:
+```bash
+kubectl -n pavo top pod --sort-by=cpu --no-headers | head -1
+# watermarker-cf4bf558f-vx6wh   1066m   0Mi    <- the busiest Pod, but not the one asked for
+```
+Read which column the task names before you sort. Also note that `kubectl top` shows current
+*usage*. The `requests`/`limits` in `kubectl describe pod` are reservations and caps, not what the
+Pod is actually consuming, so they can't answer this question.
+
+Two related views: `kubectl top pod --containers` splits the numbers per container (useful when a
+multi-container Pod is the heavy one and the task asks which container), and `kubectl top node`
+is the same idea one level up, for "which *node* is under pressure".
 
 ## Cleanup
 
 ```bash
-kubectl delete ns topns
+kubectl delete ns pavo
 ```
+
+*Verified end-to-end on a local kind cluster (Kubernetes v1.30) on 2026-09-24.*

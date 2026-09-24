@@ -17,12 +17,12 @@ kubectl create ns play && kubectl config set-context --current --namespace=play
 | [pods/multi-container-pod.yaml](pods/multi-container-pod.yaml) | Two containers in one Pod (`kubectl exec -c`, `kubectl logs -c`) |
 | [pods/init-container-pod.yaml](pods/init-container-pod.yaml) | An init container writing to a shared `emptyDir` that nginx then serves |
 | [pods/configmap-volume-pod.yaml](pods/configmap-volume-pod.yaml) | A ConfigMap mounted as files (create `app-config` first) |
-| [pods/secret-env-pod.yaml](pods/secret-env-pod.yaml) | One Secret key as an env var (create `db-creds` first) |
+| [pods/secret-env-pod.yaml](pods/secret-env-pod.yaml) | One Secret key as an env var (create `orders-db-login` first) |
 | [pods/downward-api-volume.yaml](pods/downward-api-volume.yaml) | The Pod's own labels and annotations exposed as files with a `downwardAPI` volume; relabel it and watch the file change |
 
 ```bash
 kubectl create configmap app-config --from-literal=color=blue
-kubectl create secret generic db-creds --from-literal=password=s3cret
+kubectl create secret generic orders-db-login --from-literal=password=not-a-real-pw-42
 ```
 
 ## Jobs and CronJobs

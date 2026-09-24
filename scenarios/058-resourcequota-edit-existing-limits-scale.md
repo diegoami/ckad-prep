@@ -1,17 +1,18 @@
-# 058 — Edit an existing Deployment's mismatched limits, then scale under a ResourceQuota
+# 058 — Over-sized limits block a scale-out under a quota: shrink, fix, then grow
 
 **Domain:** Application Environment, Configuration and Security · **Difficulty:** Hard
 
 In `052` the container has *no* limits and the fix is adding them. Here it already has requests
-**and** limits, just at the wrong ratio: you edit existing values in place and then scale, and the
-order you do it in matters.
+**and** limits, the limits are just far too generous. You change existing values in place and
+scale, and the order you do it in matters.
 
 ## Task
 
-> In namespace `vistula`, the Deployment `api` runs 1 replica and its container sets both
-> `resources.requests` and `resources.limits`. The namespace's ResourceQuota `vistula-quota` must not
-> be changed. Scale `api` to 3 replicas and make sure all 3 are running. Company policy says the
-> container's limits must be exactly double its requests.
+> Deployment `ledger-sync` in namespace `galangal` runs a single replica today. Ahead of month-end
+> it has to run 4 replicas, all of them Running. The namespace's ResourceQuota `galangal-budget` is
+> fixed and must not be edited. A platform rule, which the current Deployment breaks, says a
+> container's CPU and memory limits may be at most 1.5 times its requests. Leave the requests
+> unchanged.
 
 ## Documentation
 
@@ -23,122 +24,125 @@ What to look up: **Resource Quotas**, plus **Deployments**' rolling-update surge
 ## Setup
 
 ```bash
-kubectl create ns vistula
+kubectl create ns galangal
 
 cat <<'EOF' | kubectl apply -f -
 apiVersion: v1
 kind: ResourceQuota
 metadata:
-  name: vistula-quota
-  namespace: vistula
+  name: galangal-budget
+  namespace: galangal
 spec:
   hard:
-    requests.cpu: 600m
-    requests.memory: 768Mi
-    limits.cpu: 1200m
-    limits.memory: 1536Mi
+    requests.cpu: 500m
+    requests.memory: 640Mi
+    limits.cpu: 600m
+    limits.memory: 768Mi
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: api
-  namespace: vistula
+  name: ledger-sync
+  namespace: galangal
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: api
+      app: ledger-sync
   template:
     metadata:
       labels:
-        app: api
+        app: ledger-sync
     spec:
       containers:
-      - name: api
-        image: nginx
+      - name: ledger-sync
+        image: httpd:2.4-alpine
         resources:
           requests:
-            cpu: 200m
-            memory: 256Mi
-          # Deliberately broken: limits are 3x requests, not 2x — fine at 1 replica,
-          # but won't fit the quota once scaled to 3
+            cpu: 100m
+            memory: 128Mi
           limits:
-            cpu: 600m
-            memory: 768Mi
+            cpu: 400m
+            memory: 512Mi
 EOF
 
-kubectl rollout status deployment/api -n vistula --timeout=60s
+kubectl rollout status deployment/ledger-sync -n galangal --timeout=60s
 ```
 
-Confirm the "given" state — healthy at 1 replica, quota has plenty of headroom for now:
+Confirm the "given" state: healthy at 1 replica.
 ```bash
-kubectl get deploy api -n vistula
+kubectl get deploy ledger-sync -n galangal
 # READY 1/1
 ```
 
 ## Solution
 
-Scaling first, before fixing anything, shows exactly why the ratio matters — don't skip this step,
-it's what makes the quota math concrete instead of abstract:
+Work out the numbers first. The rule caps the limits at 1.5 × 100m = **150m** CPU and
+1.5 × 128Mi = **192Mi** memory. At 4 replicas that is 600m/768Mi of limits, exactly the quota's
+`limits.*` ceiling, and 400m/512Mi of requests, inside `requests.*`. The current 400m/512Mi limits
+cost 4× the requests, so one replica already uses two thirds of the `limits.cpu` budget.
+
+Scaling first shows the problem concretely:
 ```bash
-kubectl scale deployment api -n vistula --replicas=3
+kubectl scale deployment ledger-sync -n galangal --replicas=4
 sleep 5
-kubectl get deploy api -n vistula
-# READY 2/3 — stuck
+kubectl get deploy ledger-sync -n galangal
+# READY 1/4 — stuck
 
-RS=$(kubectl get rs -n vistula -l app=api -o jsonpath='{.items[0].metadata.name}')
-kubectl describe rs "$RS" -n vistula | grep FailedCreate
-# forbidden: exceeded quota: vistula-quota, requested: limits.cpu=600m,limits.memory=768Mi,
-#   used: limits.cpu=1200m,limits.memory=1536Mi, limited: limits.cpu=1200m,limits.memory=1536Mi
+RS=$(kubectl get rs -n galangal -l app=ledger-sync -o jsonpath='{.items[0].metadata.name}')
+kubectl describe rs "$RS" -n galangal | grep FailedCreate | tail -1
+# ... forbidden: exceeded quota: galangal-budget, requested: limits.cpu=400m,limits.memory=512Mi,
+#   used: limits.cpu=400m,limits.memory=512Mi, limited: limits.cpu=600m,limits.memory=768Mi
 ```
-2 replicas at 600m/768Mi limits each already consume the *entire* `limits.cpu`/`limits.memory`
-quota (1200m/1536Mi, exactly the hard cap), so there's no room for a 3rd Pod.
+One Pod at 400m leaves 200m, and a second one needs 400m, so nothing more gets created.
 
-**Scale back down before patching, then fix, then scale up again** — patching the container spec
-while replicas are stuck creates a new ReplicaSet, and a rolling update needs *surge* headroom on
-top of what the old (already quota-maxed) Pods hold, which deadlocks it instead of fixing anything:
+**Scale back down before changing the template, then fix, then scale up again.** Changing the Pod
+template starts a rolling update, which needs quota headroom for new Pods *on top of* the old ones.
+At one replica there is room for a single 150m surge Pod (400m + 150m = 550m):
 ```bash
-kubectl scale deployment api -n vistula --replicas=1
+kubectl scale deployment ledger-sync -n galangal --replicas=1
 sleep 3
 
-kubectl patch deployment api -n vistula --type=json \
-  -p='[{"op": "replace", "path": "/spec/template/spec/containers/0/resources/limits", "value": {"cpu": "400m", "memory": "512Mi"}}]'
-kubectl rollout status deployment/api -n vistula --timeout=60s
+kubectl set resources deployment ledger-sync -n galangal -c ledger-sync \
+  --limits=cpu=150m,memory=192Mi
+kubectl rollout status deployment/ledger-sync -n galangal --timeout=60s
 ```
-**Faster by hand:** `kubectl edit deployment api -n vistula`, overwrite the `limits:` values
-under `resources:` directly, save.
+`kubectl set resources` only touches the values you name, so the requests stay as they are. The
+JSON-patch equivalent, if you prefer one:
+`kubectl patch deployment ledger-sync -n galangal --type=json -p='[{"op":"replace","path":"/spec/template/spec/containers/0/resources/limits","value":{"cpu":"150m","memory":"192Mi"}}]'`.
+**Faster by hand:** `kubectl edit deployment ledger-sync -n galangal`, overwrite the two values
+under `limits:`, save.
 
-Then scale up again:
+Then scale out:
 ```bash
-kubectl scale deployment api -n vistula --replicas=3
-kubectl rollout status deployment/api -n vistula --timeout=60s
-# deployment "api" successfully rolled out
+kubectl scale deployment ledger-sync -n galangal --replicas=4
+kubectl rollout status deployment/ledger-sync -n galangal --timeout=60s
+# deployment "ledger-sync" successfully rolled out
 ```
 
-Confirm — 3 replicas at the corrected 400m/512Mi limits (double the 200m/256Mi requests) land
-*exactly* on the quota's hard ceiling:
+Confirm: 4 replicas at 150m/192Mi land exactly on the `limits.*` ceiling.
 ```bash
-kubectl get deploy api -n vistula
-# READY 3/3
+kubectl get deploy ledger-sync -n galangal
+# READY 4/4
 
-kubectl describe resourcequota vistula-quota -n vistula | grep -A5 "Resource "
-# limits.cpu       1200m   1200m
-# limits.memory    1536Mi  1536Mi
-# requests.cpu     600m    600m
-# requests.memory  768Mi   768Mi
+kubectl describe resourcequota galangal-budget -n galangal | grep -A5 "Resource "
+# limits.cpu       600m   600m
+# limits.memory    768Mi  768Mi
+# requests.cpu     400m   500m
+# requests.memory  512Mi  640Mi
 ```
 
-**Gotcha verified live:** patching the resources *before* scaling back down (i.e. patching while
-still stuck at 2/3) triggers a rolling update that can't proceed at all — the old ReplicaSet's Pods
-already hold 100% of the `limits.*` quota, so the new ReplicaSet can't even create one surge Pod,
-and `kubectl rollout status` just times out. Always shrink back to a replica count the *current*
-(broken) spec can afford before editing the template, then grow again once the template is fixed —
-editing-in-place under quota pressure is not the same problem as authoring correctly from scratch.
+**Gotcha verified live:** changing the limits while the Deployment is still stuck at 1/4 doesn't
+recover it. The rollout does create a new Pod, but then old and new Pods share the quota: the old
+400m Pod stays up because taking it away would leave too few available replicas, and there isn't
+enough budget for the rest of the new ones. `kubectl rollout status` times out and the Deployment
+sits at 2/4 until you scale it back down. Shrink to a replica count the *current* spec can afford
+before editing the template, and grow once the template is fixed.
 
 ## Cleanup
 
 ```bash
-kubectl delete ns vistula
+kubectl delete ns galangal
 ```
 
-*Verified end-to-end on a local kind cluster (Kubernetes v1.30) on 2026-09-23.*
+*Verified end-to-end on a local kind cluster (Kubernetes v1.30) on 2026-09-24.*

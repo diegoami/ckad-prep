@@ -41,10 +41,10 @@ weight.
 | [041](041-statefulset-headless-service.md) | StatefulSet with stable per-Pod network identity via a headless Service | Medium |
 | [042](042-taints-and-tolerations.md) | Keep ordinary Pods off a tainted node, admit only Pods that tolerate it | Medium |
 | [046](046-job-active-deadline-seconds.md) | Kill a Job that runs too long, distinct from retrying a Job that fails | Medium |
-| [059](059-docker-build-tag-save-oci.md) | Build an image, tag it correctly, save it in OCI format | Easy |
-| [062](062-cronjob-activedeadlineseconds.md) | A CronJob whose spawned Jobs must actually exit, not sleep forever | Medium |
-| [068](068-docker-build-run-push-save-combo.md) | Docker: build, name a container, push under a username, save under a different tag | Medium |
-| [078](078-cronjob-history-limits-and-deadline-combo.md) | CronJob with success/failure history limits and a deadline, all together | Medium |
+| [059](059-offline-image-archive.md) | Hand over an image as a single archive for an offline site | Easy |
+| [062](062-cronjob-activedeadlineseconds.md) | Put a hard runtime ceiling on every run a CronJob starts | Medium |
+| [068](068-docker-build-run-push-save-combo.md) | Docker: build once, smoke-test on a published port, push two tags, bundle two names in one archive | Medium |
+| [078](078-cronjob-history-limits-and-deadline-combo.md) | CronJob with a time zone, lopsided success/failure history limits and a per-run deadline | Medium |
 | [087](087-statefulset-volumeclaimtemplates-ordered-scaledown.md) | StatefulSet with `volumeClaimTemplates`: a real PVC per Pod, and ordered shutdown | Medium |
 
 ### Application Deployment (20%)
@@ -60,8 +60,8 @@ weight.
 | [047](047-multi-document-yaml.md) | Author a ConfigMap, Deployment, and Service as one multi-document YAML file | Easy |
 | [060](060-canary-clone-from-stable-deployment.md) | Clone an existing stable Deployment into a canary, don't author it from scratch | Medium |
 | [066](066-deployment-rollback-undo-defaults-to-broken-revision.md) | Rollback trap: plain `rollout undo` can land you back on a *different* broken revision | Medium |
-| [072](072-canary-with-total-pod-ceiling.md) | Canary deployment under a total-pod ceiling, not just a traffic percentage | Medium |
-| [077](077-rolling-update-50-50-image-change-rollback.md) | 50%/50% rolling-update strategy, a bad image change, rollout status/history, rollback | Medium |
+| [072](072-canary-with-total-pod-ceiling.md) | Canary release inside a Pod quota the stable version already exceeds | Medium |
+| [077](077-rolling-update-surge-and-rollback.md) | Size a rollout's blast radius with maxSurge/maxUnavailable, push a bad tag, read the history, roll back | Medium |
 | [086](086-blue-green-deployment-selector-cutover.md) | Blue/green deployment: instant full cutover via a Service selector patch | Medium |
 
 ### Application Observability and Maintenance (15%)
@@ -72,13 +72,13 @@ weight.
 | [031](031-api-deprecation-conversion.md) | Convert a manifest off a removed API version | Medium |
 | [032](032-liveness-and-startup-probes.md) | Startup probe gating a slow app, liveness probe catching a later failure | Hard |
 | [033](033-kubectl-debug-ephemeral-container.md) | Attach a debug shell to a running Pod with `kubectl debug` | Easy |
-| [034](034-kubectl-top-resource-usage.md) | Find the pod using the most CPU with `kubectl top` | Easy |
+| [034](034-kubectl-top-resource-usage.md) | Flag the Pod holding the most memory with `kubectl top` | Easy |
 | [035](035-horizontal-pod-autoscaler.md) | Autoscale a Deployment on CPU utilization | Medium |
 | [037](037-multi-bug-triage.md) | Triage a Deployment broken by two unrelated, stacked bugs | Hard |
 | [045](045-kubectl-cp-file-transfer.md) | Copy a file into and out of a running container | Easy |
 | [054](054-crashloop-previous-logs.md) | CrashLoopBackOff: read the crash reason with `--previous`, not plain `logs` | Easy |
 | [065](065-http-readiness-probe-existing-deployment.md) | Add an HTTP readiness probe to an already-running Deployment | Easy |
-| [067](067-deprecated-apiversion-and-field-hpa.md) | A manifest with both a removed apiVersion *and* a deprecated field shape | Medium |
+| [067](067-deprecated-cronjob-seccomp.md) | Revive an old CronJob manifest whose seccomp setting silently stopped working | Medium |
 | [069](069-liveness-exec-probe-missing-command.md) | Liveness exec probe on a container whose command exits immediately | Easy |
 | [076](076-deprecated-deployment-apiversion.md) | Convert a Deployment off a removed apiVersion, and the selector it never had | Medium |
 
@@ -97,17 +97,17 @@ weight.
 | [043](043-limitrange-defaults.md) | LimitRange auto-injecting resource requests/limits on bare Pods | Easy |
 | [048](048-rbac-forbidden-diagnosis.md) | Diagnose and fix a ServiceAccount hitting `Forbidden`, without recreating anything | Medium |
 | [051](051-securitycontext-merge-existing-deployment.md) | Add `runAsUser` to an existing Deployment without losing its other securityContext fields | Medium |
-| [052](052-resourcequota-limits-double-requests.md) | Fix a Deployment rejected by a ResourceQuota, by setting limits to double the requests | Medium |
+| [052](052-resourcequota-guaranteed-qos.md) | A quota that insists on limits: get a Deployment's Pods created, with Guaranteed QoS | Medium |
 | [053](053-convert-hardcoded-env-to-secret.md) | Convert a hardcoded env var to a Secret, without touching the other env vars | Medium |
-| [058](058-resourcequota-edit-existing-limits-scale.md) | Edit an existing Deployment's mismatched limits, then scale under a ResourceQuota | Hard |
-| [063](063-securitycontext-merge-nested-capabilities.md) | Add `runAsUser: 10000` to a Deployment whose securityContext already nests `capabilities` | Easy |
+| [058](058-resourcequota-edit-existing-limits-scale.md) | Over-sized limits block a scale-out under a quota: shrink, fix, then grow | Hard |
+| [063](063-securitycontext-merge-nested-capabilities.md) | Set a container's UID and GID without losing its existing securityContext, in a two-container Pod | Easy |
 | [064](064-rbac-create-from-scratch-forbidden.md) | RBAC from scratch: create SA, Role, RoleBinding, and wire them to a Deployment | Hard |
-| [071](071-immutable-pod-securitycontext-delete-recreate.md) | Add securityContext fields to a running Pod that can't be `kubectl edit`ed in place | Medium |
-| [075](075-resourcequota-half-limit-arithmetic-top.md) | Size a Pod's limit at half the namespace's ResourceQuota ceiling, then find the heaviest Pod | Medium |
-| [079](079-runasnonroot-enforcement.md) | `runAsNonRoot: true` on an image that defaults to root, and why the fix has two layers | Medium |
-| [080](080-pod-security-standards-restricted.md) | Pod Security Standards: a namespace label rejecting non-compliant Pods | Medium |
-| [082](082-limitrange-min-max-rejection.md) | A Pod rejected by LimitRange min/max, fixed by sizing to half the ceiling | Easy |
-| [084](084-rbac-swap-to-correct-serviceaccount.md) | RBAC fix by swapping to an already-correctly-provisioned ServiceAccount | Medium |
+| [071](071-immutable-pod-securitycontext-delete-recreate.md) | Harden a bare Pod whose securityContext can't be changed in place | Medium |
+| [075](075-resourcequota-headroom-top-cpu.md) | Size a Pod to the quota headroom that's left, then find the top CPU consumer | Medium |
+| [079](079-runasnonroot-enforcement.md) | `runAsNonRoot: true` rejects an image that is already non-root | Medium |
+| [080](080-pod-security-standards-restricted.md) | Pod Security Admission: preview, enforce and fix a Deployment under `restricted` | Medium |
+| [082](082-limitrange-min-max-rejection.md) | A Pod rejected by a LimitRange's max and limit/request ratio, fixed to the largest limits allowed | Easy |
+| [084](084-rbac-swap-to-correct-serviceaccount.md) | RBAC fix without touching RBAC: pick the right ServiceAccount out of several | Medium |
 | [085](085-qos-class-and-oomkilled-diagnosis.md) | The three QoS classes, and what an OOM kill actually looks like on this cluster | Medium |
 | [088](088-imagepullbackoff-missing-pull-secret.md) | ImagePullBackOff from a private registry, fixed with `imagePullSecrets` | Medium |
 
@@ -124,11 +124,11 @@ weight.
 | [050](050-networkpolicy-label-fix.md) | Restore connectivity blocked by an existing NetworkPolicy, by relabeling the client Pod | Easy |
 | [055](055-ingress-path-based-multi-service.md) | One Ingress, one host, two Services split by path | Medium |
 | [056](056-ingress-multi-host-different-services.md) | One Ingress, multiple hosts, each to a different Service | Medium |
-| [057](057-networkpolicy-multi-policy-three-pod-chain.md) | Two existing NetworkPolicies, three Pods, fix connectivity by labeling only | Hard |
+| [057](057-networkpolicy-multi-policy-three-pod-chain.md) | Egress and ingress policies both gate a call: fix two clients by relabeling only | Hard |
 | [061](061-service-selector-label-key-mismatch.md) | Service selector using the wrong label *key*, not just the wrong value | Medium |
-| [070](070-networkpolicy-one-pod-two-independent-policies.md) | One new Pod needs two different labels to satisfy two independent NetworkPolicies | Medium |
-| [073](073-deployment-label-scope-trap-nodeport.md) | `kubectl label deployment` labels the object, not the Pods it creates | Medium |
-| [074](074-networkpolicy-ipblock-except-and-peer-or-trap.md) | ipBlock `except`, and a NetworkPolicy `from:` list-vs-single-peer trap that undoes it | Hard |
+| [070](070-networkpolicy-one-pod-two-independent-policies.md) | Let a Deployment through two existing NetworkPolicies by labels alone | Medium |
+| [073](073-deployment-label-scope-trap-nodeport.md) | A Service selecting on a label that `kubectl label deployment` never gave the Pods | Medium |
+| [074](074-networkpolicy-ipblock-except-and-peer-or-trap.md) | Fix two drafted NetworkPolicies: a `from` list that ORs, and an egress `ipBlock` without DNS | Hard |
 | [081](081-kubectl-port-forward.md) | Reach a Pod (or Service) directly with `kubectl port-forward`, no Service required | Easy |
 | [083](083-networkpolicy-cross-namespace-selector.md) | Cross-namespace NetworkPolicy via `namespaceSelector`, and the port it actually checks | Hard |
 

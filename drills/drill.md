@@ -1043,21 +1043,21 @@ containers:
 
 ---
 
-### 6.5 Create a Secret `db-creds` with `password=s3cr3t` — [Secrets](https://kubernetes.io/docs/concepts/configuration/secret/)
+### 6.5 Create a Secret `app-secret` with `password=changeme-42` — [Secrets](https://kubernetes.io/docs/concepts/configuration/secret/)
 <details><summary>answer</summary>
 
 ```bash
-k create secret generic db-creds --from-literal=password=s3cr3t
+k create secret generic app-secret --from-literal=password=changeme-42
 ```
 </details>
 
 ---
 
-### 6.6 Decode the value of key `password` from secret `db-creds` — [Decode a Secret](https://kubernetes.io/docs/tasks/configmap-secret/managing-secret-using-kubectl/#decoding-secret)
+### 6.6 Decode the value of key `password` from secret `app-secret` — [Decode a Secret](https://kubernetes.io/docs/tasks/configmap-secret/managing-secret-using-kubectl/#decoding-secret)
 <details><summary>answer</summary>
 
 ```bash
-k get secret db-creds -o jsonpath='{.data.password}' | base64 -d
+k get secret app-secret -o jsonpath='{.data.password}' | base64 -d
 ```
 </details>
 
@@ -1071,21 +1071,21 @@ env:
 - name: DB_PASSWORD
   valueFrom:
     secretKeyRef:
-      name: db-creds
+      name: app-secret
       key: password
 ```
 </details>
 
 ---
 
-### 6.8 Mount secret `db-creds` as a volume at `/etc/secrets` (read-only) — [Secret as volume](https://kubernetes.io/docs/tasks/inject-data-application/distribute-credentials-secure/#create-a-pod-that-has-access-to-the-secret-data-through-a-volume)
+### 6.8 Mount secret `app-secret` as a volume at `/etc/secrets` (read-only) — [Secret as volume](https://kubernetes.io/docs/tasks/inject-data-application/distribute-credentials-secure/#create-a-pod-that-has-access-to-the-secret-data-through-a-volume)
 <details><summary>answer</summary>
 
 ```yaml
 volumes:
 - name: secret-vol
   secret:
-    secretName: db-creds
+    secretName: app-secret
 containers:
 - name: nginx
   image: nginx

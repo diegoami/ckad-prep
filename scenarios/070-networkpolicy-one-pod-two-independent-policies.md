@@ -1,87 +1,92 @@
-# 070 — One new Pod needs two different labels to satisfy two independent NetworkPolicies
+# 070 — Let a Deployment through two existing NetworkPolicies by labels alone
 
 **Domain:** Services and Networking · **Difficulty:** Medium
 
-In `057`, two policies gate a chain and two different Pods each need one label. Here two unrelated
-policies each protect a different app, and a single client Pod has to reach both, so it needs both
-labels at once. The label keys have to be copied exactly: a key that is off by one hyphen still
-"works" with `kubectl label` and still gets blocked.
+In `057`, two clients are each blocked on a different side (egress or ingress). Here two unrelated
+policies each protect a different app, and one client Deployment has to reach both, so its Pods
+need what *both* policies ask for at once. The labels have to be read off the policies exactly: one
+uses a set-based selector, the other expects a value that isn't `true`, and `kubectl label` accepts
+a wrong guess without complaint.
 
 ## Task
 
-> The `everest` namespace runs two apps, `catalog` and `checkout`, each behind a Service on port
-> 80 and each protected by an existing NetworkPolicy (`catalog-access` and `checkout-ingress`).
-> Those policies are owned by the security team and must not be edited, replaced or supplemented.
+> In namespace `corvus`, the Corvus finance team runs two internal services, `ledger` (Service
+> `ledger`, port 8080) and `ratecard` (Service `ratecard`, port 80). Each is protected by an existing
+> NetworkPolicy, `ledger-ingress` and `ratecard-ingress`. The platform team owns those policies:
+> they must not be edited, replaced, deleted or supplemented with new ones.
 >
-> A new Pod `reporting` in the same namespace needs to reach both the `catalog` and the `checkout`
-> Service. Give it access to both without creating, changing or deleting any NetworkPolicy.
+> The Deployment `billing-worker` in the same namespace now needs to reach both services. Give its
+> Pods access to both, in a way that still holds after the Pods are replaced (a rollout or a
+> restart), without touching any NetworkPolicy.
 
 ## Documentation
 
-What to look up: **Network Policies**.
+What to look up: **Network Policies**, plus **Labels and Selectors** (set-based requirements).
 - <https://kubernetes.io/docs/concepts/services-networking/network-policies/> — each policy's
   `podSelector`/`ingress[].from` is evaluated independently; a Pod that has to satisfy two separate
   policies needs every label each one asks for.
+- <https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#set-based-requirement> —
+  how `matchExpressions` with `operator: In` reads.
 
 ## Setup
 
 ```bash
-kubectl create ns everest
-kubectl run catalog --image=nginx:1.25-alpine -n everest --labels=app=catalog
-kubectl run checkout --image=nginx:1.25-alpine -n everest --labels=app=checkout
-kubectl run reporting --image=busybox:1.31.0 -n everest --labels=app=reporting --command -- sleep 3600
-kubectl expose pod catalog -n everest --port=80
-kubectl expose pod checkout -n everest --port=80
-kubectl wait --for=condition=Ready pod/catalog pod/checkout pod/reporting -n everest --timeout=60s
+kubectl create ns corvus
+kubectl run ledger --image=nginx:1.25-alpine -n corvus --labels=app=ledger
+kubectl run ratecard --image=nginx:1.25-alpine -n corvus --labels=app=ratecard
+kubectl expose pod ledger -n corvus --port=8080 --target-port=80
+kubectl expose pod ratecard -n corvus --port=80
+kubectl create deployment billing-worker -n corvus --image=busybox:1.36 --replicas=2 -- sleep 86400
+kubectl wait --for=condition=Ready pod/ledger pod/ratecard -n corvus --timeout=60s
+kubectl rollout status deployment/billing-worker -n corvus --timeout=60s
 
 cat <<'EOF' | kubectl apply -f -
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: catalog-access
-  namespace: everest
+  name: ledger-ingress
+  namespace: corvus
 spec:
   podSelector:
     matchLabels:
-      app: catalog
+      app: ledger
+  policyTypes:
+  - Ingress
   ingress:
   - from:
     - podSelector:
-        matchLabels:
-          catalogaccess: "true"
-  egress:
-  - to:
-    - podSelector:
-        matchLabels:
-          catalogaccess: "true"
-  policyTypes:
-  - Ingress
-  - Egress
+        matchExpressions:
+        - key: ledger-consumer
+          operator: In
+          values: ["billing", "audit"]
+    ports:
+    - protocol: TCP
+      port: 80
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: checkout-ingress
-  namespace: everest
+  name: ratecard-ingress
+  namespace: corvus
 spec:
   podSelector:
     matchLabels:
-      app: checkout
+      app: ratecard
+  policyTypes:
+  - Ingress
   ingress:
   - from:
     - podSelector:
         matchLabels:
-          checkout-client: "true"
-  policyTypes:
-  - Ingress
+          ratecard-reader: "yes"
 EOF
 ```
 
 Confirm the "given" broken state, with both blocked:
 ```bash
-kubectl exec -n everest reporting -- wget -qO- -T 3 http://catalog
+kubectl exec -n corvus deploy/billing-worker -- wget -qO- -T 3 http://ledger:8080
 # wget: download timed out
-kubectl exec -n everest reporting -- wget -qO- -T 3 http://checkout
+kubectl exec -n corvus deploy/billing-worker -- wget -qO- -T 3 http://ratecard
 # wget: download timed out
 ```
 This needs a CNI that enforces NetworkPolicy. kindnet in kind v0.23 and earlier doesn't, so both
@@ -90,50 +95,66 @@ kind releases enforce it (confirmed on kind v0.31). See `guide/practice-cluster.
 
 ## Solution
 
-Read each policy's `ingress[].from[].podSelector`. They use two *different* label keys, and
-`reporting` needs both at the same time, not one or the other:
+Read what each policy wants from a client. `kubectl describe` renders both selector styles
+readably:
 ```bash
-kubectl get networkpolicy catalog-access -n everest -o jsonpath='{.spec.ingress[0].from[0].podSelector.matchLabels}{"\n"}'
-# {"catalogaccess":"true"}
-
-kubectl get networkpolicy checkout-ingress -n everest -o jsonpath='{.spec.ingress[0].from[0].podSelector.matchLabels}{"\n"}'
-# {"checkout-client":"true"}
+kubectl describe networkpolicy ledger-ingress ratecard-ingress -n corvus | grep -A3 'Allowing ingress'
+#   Allowing ingress traffic:
+#     To Port: 80/TCP
+#     From:
+#       PodSelector: ledger-consumer in (audit,billing)
+# --
+#   Allowing ingress traffic:
+#     To Port: <any> (traffic allowed to all ports)
+#     From:
+#       PodSelector: ratecard-reader=yes
 ```
+So a client needs `ledger-consumer` set to `billing` or `audit` (for a billing worker, `billing` is
+the honest choice) **and** `ratecard-reader=yes`. Both at the same time, not one or the other.
 
-One `kubectl label` call, both keys at once:
+The labels go on the Deployment's Pod **template**, not on the running Pods. `kubectl label pods -l
+app=billing-worker ...` would work right now, but the next rollout or restart creates new Pods from
+the template and the access is gone, which the task rules out (see `073` for the same scope issue
+with `kubectl label deployment`):
 ```bash
-kubectl label pod reporting catalogaccess=true checkout-client=true -n everest
+kubectl patch deployment billing-worker -n corvus \
+  -p '{"spec":{"template":{"metadata":{"labels":{"ledger-consumer":"billing","ratecard-reader":"yes"}}}}}'
+kubectl rollout status deployment/billing-worker -n corvus --timeout=60s
 ```
+**Faster by hand:** `kubectl edit deployment billing-worker -n corvus` and add the two lines under
+`spec.template.metadata.labels`. No trap either way; the strategic-merge patch above just merges
+two keys into that map.
 
-Confirm both paths now work:
+Test from one of the new Pods. Select it by the new labels: the old Pods can take a while to
+terminate, and they don't carry the labels, so `deploy/billing-worker` could still pick one of
+them:
 ```bash
-kubectl exec -n everest reporting -- wget -qO- -T 3 http://catalog | head -4
-# nginx welcome page
-
-kubectl exec -n everest reporting -- wget -qO- -T 3 http://checkout | head -4
-# nginx welcome page
+POD=$(kubectl get pods -n corvus -l ledger-consumer=billing,ratecard-reader=yes -o jsonpath='{.items[0].metadata.name}')
+kubectl exec -n corvus "$POD" -- wget -qO- -T 3 http://ledger:8080 | grep -o '<title>.*</title>'
+# <title>Welcome to nginx!</title>
+kubectl exec -n corvus "$POD" -- wget -qO- -T 3 http://ratecard | grep -o '<title>.*</title>'
+# <title>Welcome to nginx!</title>
 ```
 
 **The trap this scenario is built around:** it's tempting to type a plausible-looking label such as
-`catalog-access=true` (hyphenated, like the policy's own name) instead of copying the policy's
-selector key verbatim. `kubectl label` doesn't check that a key means anything: `pod/reporting
-labeled` reports success either way. Only the `wget` test shows that traffic is still blocked,
-because `catalog-access` and `catalogaccess` are two different strings that look almost the same.
-Always copy the exact key out of `podSelector.matchLabels`, never retype it from memory or from how
-the task text phrases it.
+`ledger-consumer=true` or `ratecard-reader=true` instead of copying what the policy asks for. `kubectl
+label` and `kubectl patch` don't check that a label means anything: both report success either way.
+Only the `wget` test shows that traffic is still blocked, because `true` is neither `billing`,
+`audit` nor `yes`. Always copy keys and values out of the policy's selector, never retype them from
+memory or from how the task text phrases it.
 
-`catalog-access` also has an `egress` rule (restricted to `catalogaccess: "true"` peers). It governs
-the `catalog` Pod's own *outbound* connections, not who may connect to it. It doesn't matter here,
-because `reporting` only opens connections *to* `catalog`, and replies to an allowed connection are
-always allowed. Worth noticing so you don't spend time on a rule that doesn't apply to the direction
-of traffic being asked about.
+**Why `port: 80` in `ledger-ingress` doesn't block the Service port 8080:** a NetworkPolicy sees
+traffic after the Service has translated it, so its `ports` refer to the port on the destination
+Pod (the Service's `targetPort`, here 80), not to the Service's own port. A client calling
+`ledger:8080` arrives at the Pod on port 80 and matches the rule. Changing the policy to 8080
+would actually break access.
 
 ## Cleanup
 
 ```bash
-kubectl delete ns everest
+kubectl delete ns corvus
 ```
 
-*Verified on kind v0.23 (Kubernetes v1.30) on 2026-09-23, where everything applies cleanly but the
-policies aren't enforced, and on kind v0.31 (Kubernetes v1.35), where the blocking was observed as
-intended.*
+*Verified on kind v0.23 (Kubernetes v1.30) on 2026-09-24: Setup, Solution and Cleanup run as
+written and the policies apply cleanly, but enforcement wasn't observable because kindnet on kind
+v0.23 doesn't enforce NetworkPolicy.*
